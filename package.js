@@ -2,7 +2,7 @@ Package.describe({
   name: 'zodiase:infinite-load',
   version: '0.0.1',
   // Brief, one-line summary of the package.
-  summary: 'A helper library for loading items from a collection incrementally and also know how many new items are available to be pulled.',
+  summary: 'A helper library for loading items from a collection incrementally.',
   // URL to the Git repository containing the source code for this package.
   git: 'https://github.com/Zodiase/meteor-infinite-load.git',
   // By default, Meteor will default to using README.md for documentation.
