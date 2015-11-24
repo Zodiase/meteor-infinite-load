@@ -159,7 +159,7 @@ InfiniLoad = function (collection, options) {
     }
   });
 
-  // 
+  // Subscribe to the content with those load options.
   // React to:
   // - _loadOptions
   _computations['subscribeContent'] = _tracker.autorun(function(comp) {
