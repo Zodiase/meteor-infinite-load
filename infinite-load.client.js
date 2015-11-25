@@ -1,13 +1,16 @@
 InfiniLoad = function (collection, options) {
   "use strict";
 
-  var _tracker, _subscriber,
+  var _initialDataReady,
+      _tracker, _subscriber,
+      _onReady, _onUpdate,
       _initialLimit, _limitIncrement,
       _statCollectionName, _contentCollectionName,
       _Stats,
       _newDocumentCount, _totalDocumentCount,
       _latestDocumentTime, _lastLoadTime, _listLoadLimit, _loadOptions,
       _computations, _subscriptions,
+      _onContentSubscribed,
       _UpdateLoadOptions, _UpdateLoadOptions_NonReactive,
       _GetOldDocumentCount,
       _GetTotalDocumentCount,
@@ -21,14 +24,21 @@ InfiniLoad = function (collection, options) {
   check(options, Match.Optional(Match.ObjectIncluding({
     initialLimit: Match.Optional(Number),
     limitIncrement: Match.Optional(Number),
-    tpl: Match.Optional(Blaze.TemplateInstance)
+    tpl: Match.Optional(Blaze.TemplateInstance),
+    onReady: Match.Optional(Function),
+    onUpdate: Match.Optional(Function)
   })));
   if (options == null) {
     options = {};
   }
 
+  _initialDataReady = false;
+
   _tracker = options.tpl ? options.tpl : Tracker;
   _subscriber = options.tpl ? options.tpl : Meteor;
+  
+  _onReady = options.onReady ? options.onReady : null;
+  _onUpdate = options.onUpdate ? options.onUpdate : null;
 
   _initialLimit = options.initialLimit ? options.initialLimit : 10;
   _limitIncrement = options.limitIncrement ? options.limitIncrement : _initialLimit;
@@ -159,6 +169,19 @@ InfiniLoad = function (collection, options) {
     }
   });
 
+  _onContentSubscribed = function () {
+    if (!_initialDataReady) {
+      _initialDataReady = true;
+      if (_onReady) {
+        _onReady.call(_API, collection);
+      }
+    } else {
+      if (_onUpdate) {
+        _onUpdate.call(_API, collection);
+      }
+    }
+  };
+
   // Subscribe to the content with those load options.
   // React to:
   // - _loadOptions
@@ -168,7 +191,7 @@ InfiniLoad = function (collection, options) {
     if (parameters.lastLoadTime === 0) {
       return;
     }
-    _subscriptions['content'] = _subscriber.subscribe(_contentCollectionName, parameters);
+    _subscriptions['content'] = _subscriber.subscribe(_contentCollectionName, parameters, _onContentSubscribed);
   });
 
   _Stop = function() {
