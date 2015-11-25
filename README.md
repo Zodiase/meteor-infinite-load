@@ -34,6 +34,9 @@ template.onCreated (template) ->
 		# This typically happens after calling `loadMore` or `loadNew`.
 		# Optional.
 		onUpdate: Function
+		# Set to true to show detailed logs.
+    # Optional. Default is false.
+    verbose: Boolean
 	}
 
 	# `wrappedCollection` would have the following interfaces:
@@ -90,5 +93,8 @@ InfiniLoad collection, {
   # Name of the field used for temporal sorting.
   # Optional. Default is 'createTime'.
   timeFieldName: String
+  # Set to true to show detailed logs.
+  # Optional. Default is false.
+  verbose: Boolean
 }
 ```

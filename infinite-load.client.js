@@ -1,11 +1,22 @@
+var log = function () {
+  var args = [
+    '<InfiniLoad>'
+  ];
+  for (let key in arguments) {
+    args.push(arguments[key]);
+  }
+  console.log.apply(console, args);
+};
+
 InfiniLoad = function (collection, options) {
   "use strict";
 
   var _initialDataReady,
       _tracker, _subscriber,
       _onReady, _onUpdate,
+      _verbose,
       _initialLimit, _limitIncrement,
-      _statCollectionName, _contentCollectionName,
+      _statsCollectionName, _contentCollectionName,
       _Stats,
       _newDocumentCount, _totalDocumentCount,
       _latestDocumentTime, _lastLoadTime, _listLoadLimit, _loadOptions,
@@ -26,7 +37,8 @@ InfiniLoad = function (collection, options) {
     limitIncrement: Match.Optional(Number),
     tpl: Match.Optional(Blaze.TemplateInstance),
     onReady: Match.Optional(Function),
-    onUpdate: Match.Optional(Function)
+    onUpdate: Match.Optional(Function),
+    verbose: Match.Optional(Boolean)
   })));
   if (options == null) {
     options = {};
@@ -36,17 +48,27 @@ InfiniLoad = function (collection, options) {
 
   _tracker = options.tpl ? options.tpl : Tracker;
   _subscriber = options.tpl ? options.tpl : Meteor;
-  
+
   _onReady = options.onReady ? options.onReady : null;
   _onUpdate = options.onUpdate ? options.onUpdate : null;
+
+  _verbose = options.verbose ? options.verbose : false;
 
   _initialLimit = options.initialLimit ? options.initialLimit : 10;
   _limitIncrement = options.limitIncrement ? options.limitIncrement : _initialLimit;
 
-  _statCollectionName = '__InfiniLoad-Stats-' + collection._name;
+  _statsCollectionName = '__InfiniLoad-Stats-' + collection._name;
   _contentCollectionName = '__InfiniLoad-Content-' + collection._name;
-  
-  _Stats = new Mongo.Collection(_statCollectionName)
+
+  if (_verbose) {
+    log('Initializing InfiniLoad for collection', collection._name);
+    log('statsCollectionName', _statsCollectionName);
+    log('contentCollectionName', _contentCollectionName);
+    log('initialLimit', _initialLimit);
+    log('limitIncrement', _limitIncrement);
+  }
+
+  _Stats = new Mongo.Collection(_statsCollectionName)
 
   _newDocumentCount = new ReactiveVar(0);
   _totalDocumentCount = new ReactiveVar(0);
@@ -138,7 +160,7 @@ InfiniLoad = function (collection, options) {
     parameters = {
       lastLoadTime: lastLoadTime
     };
-    _subscriptions['stats'] = _subscriber.subscribe(_statCollectionName, parameters);
+    _subscriptions['stats'] = _subscriber.subscribe(_statsCollectionName, parameters);
   });
 
   // When new stats come in, update the records.
@@ -149,6 +171,9 @@ InfiniLoad = function (collection, options) {
     stats = _Stats.find(0).fetch()[0];
     if (!stats) {
       return;
+    }
+    if (_verbose) {
+      log('Stats updated', stats);
     }
     _newDocumentCount.set(stats.newDocumentCount);
     _totalDocumentCount.set(stats.totalDocumentCount);
@@ -170,6 +195,9 @@ InfiniLoad = function (collection, options) {
   });
 
   _onContentSubscribed = function () {
+    if (_verbose) {
+      log('Data subscription ready');
+    }
     if (!_initialDataReady) {
       _initialDataReady = true;
       if (_onReady) {
@@ -188,6 +216,9 @@ InfiniLoad = function (collection, options) {
   _computations['subscribeContent'] = _tracker.autorun(function(comp) {
     var parameters;
     parameters = _loadOptions.get();
+    if (_verbose) {
+      log('Data subscription parameters', parameters);
+    }
     if (parameters.lastLoadTime === 0) {
       return;
     }

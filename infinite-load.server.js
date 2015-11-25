@@ -1,15 +1,27 @@
+var log = function () {
+  var args = [
+    '<InfiniLoad>'
+  ];
+  for (let key in arguments) {
+    args.push(arguments[key]);
+  }
+  console.log.apply(console, args);
+};
+
 InfiniLoad = function (collection, options) {
   "use strict";
 
   var statsCollectionName, contentCollectionName, findOptions, timeFieldName,
-      sortOptions, findFields, countingFields;
+      sortOptions, findFields, countingFields,
+      _verbose;
 
   check(collection, Mongo.Collection);
   // Check necessary parameters in options.
   check(options, Match.Optional(Match.ObjectIncluding({
     findOptions: Match.Optional(Object),
     findFields: Match.Optional(Object),
-    timeFieldName: Match.Optional(String)
+    timeFieldName: Match.Optional(String),
+    verbose: Match.Optional(Boolean)
   })));
   if (options == null) {
     options = {};
@@ -24,6 +36,19 @@ InfiniLoad = function (collection, options) {
   sortOptions[timeFieldName] = -1;
   countingFields = {};
   countingFields[timeFieldName] = 1;
+  
+  _verbose = options.verbose ? options.verbose : false;
+  
+  if (_verbose) {
+    log('Initializing InfiniLoad for collection', collection._name);
+    log('statsCollectionName', statsCollectionName);
+    log('contentCollectionName', contentCollectionName);
+    log('findOptions', findOptions);
+    log('findFields', findFields);
+    log('timeFieldName', timeFieldName);
+    log('sortOptions', sortOptions);
+    log('countingFields', countingFields);
+  }
 
   Meteor.publish(statsCollectionName, function(options) {
     var now, self, initializing,
@@ -137,6 +162,10 @@ InfiniLoad = function (collection, options) {
   Meteor.publish(contentCollectionName, function(options) {
     var oldDocumentFindOptions, oldDocumentCursor;
     
+    if (_verbose) {
+      log('Publish request', contentCollectionName, options);
+    }
+    
     check(options, Match.Optional(Match.ObjectIncluding({
       limit: Match.Optional(Number),
       lastLoadTime: Match.Optional(Number)
@@ -150,6 +179,10 @@ InfiniLoad = function (collection, options) {
     }
     if (options.lastLoadTime == null) {
       options.lastLoadTime = (new Date).getTime();
+    }
+    
+    if (_verbose) {
+      log('Accepted publish request', options);
     }
 
     oldDocumentFindOptions = {};
@@ -167,6 +200,10 @@ InfiniLoad = function (collection, options) {
       limit: options.limit,
       fields: findFields
     });
+    
+    if (_verbose) {
+      log('Results found', oldDocumentCursor.count());
+    }
     
     return oldDocumentCursor;
   });
