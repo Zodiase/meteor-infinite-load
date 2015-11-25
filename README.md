@@ -96,5 +96,9 @@ InfiniLoad collection, {
   # Set to true to show detailed logs.
   # Optional. Default is false.
   verbose: Boolean
+  # Simulate slow connection by sleeping the specified amount of time before
+  #   returning.
+  # Optional. Default is 0 and thus does not sleep.
+  slowdown: Number
 }
 ```

@@ -13,7 +13,7 @@ InfiniLoad = function (collection, options) {
 
   var statsCollectionName, contentCollectionName, findOptions, timeFieldName,
       sortOptions, findFields, countingFields,
-      _verbose;
+      _verbose, _slowdown;
 
   check(collection, Mongo.Collection);
   // Check necessary parameters in options.
@@ -21,7 +21,8 @@ InfiniLoad = function (collection, options) {
     findOptions: Match.Optional(Object),
     findFields: Match.Optional(Object),
     timeFieldName: Match.Optional(String),
-    verbose: Match.Optional(Boolean)
+    verbose: Match.Optional(Boolean),
+    slowdown: Match.Optional(Number)
   })));
   if (options == null) {
     options = {};
@@ -38,6 +39,7 @@ InfiniLoad = function (collection, options) {
   countingFields[timeFieldName] = 1;
   
   _verbose = options.verbose ? options.verbose : false;
+  _slowdown = options.slowdown ? options.slowdown : 0;
   
   if (_verbose) {
     log('Initializing InfiniLoad for collection', collection._name);
@@ -200,11 +202,15 @@ InfiniLoad = function (collection, options) {
       limit: options.limit,
       fields: findFields
     });
-    
+
     if (_verbose) {
       log('Results found', oldDocumentCursor.count());
     }
-    
+
+    if (_slowdown > 0) {
+      Meteor._sleepForMs(_slowdown);
+    }
+
     return oldDocumentCursor;
   });
   return;
