@@ -68,7 +68,7 @@ template.onCreated (template) ->
   totalDocumentCount = wrappedCollection.countTotal()
 
   # If the `tpl` was not specified in the collection options, `wrappedCollection` would
-  # have oen more interface:
+  # have one more interface:
 
   # Stoppeds the autoruns and subscriptions.
   wrappedCollection.stop()
