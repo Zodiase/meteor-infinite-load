@@ -85,8 +85,10 @@ InfiniLoad (Server)
 ###
 InfiniLoad collection, {
   # Options passed to `collection.find` for publishing.
+  # If a function is provided instead of an object, the function will be called
+  # with the user ID as the only argument to generate the option object.
   # Optional. If omitted, no filter will be used.
-  findOptions: Object
+  findOptions: Object|Function
   # Field options passed to `collection.find` for publishing.
   # Optional. If omitted, all fields will be returned.
   findFields: Object
