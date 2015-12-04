@@ -18,7 +18,7 @@ InfiniLoad = function (collection, options) {
   check(collection, Mongo.Collection);
   // Check necessary parameters in options.
   check(options, Match.Optional(Match.ObjectIncluding({
-    findOptions: Match.Optional(Object),
+    findOptions: Match.Optional(Match.OneOf(Object, Function)),
     findFields: Match.Optional(Object),
     timeFieldName: Match.Optional(String),
     verbose: Match.Optional(Boolean),
@@ -53,7 +53,7 @@ InfiniLoad = function (collection, options) {
   }
 
   Meteor.publish(statsCollectionName, function(options) {
-    var now, self, initializing,
+    var now, self, initializing, finalFindOptions,
         totalDocumentCount, totalDocumentCursor, totalDocumentHandle,
         latestDocumentTime, latestDocumentCursor,
         newDocumentCount, newDocumentCursor, newDocumentHandle,
@@ -74,15 +74,21 @@ InfiniLoad = function (collection, options) {
 
     self = this;
     initializing = true;
+    
+    if (typeof findOptions === 'function') {
+      finalFindOptions = findOptions(this.userId);
+    } else {
+      finalFindOptions = findOptions;
+    }
 
     totalDocumentCount = 0;
-    totalDocumentCursor = collection.find(findOptions, {
+    totalDocumentCursor = collection.find(finalFindOptions, {
       sort: sortOptions,
       fields: countingFields
     });
 
     latestDocumentTime = 0;
-    latestDocumentCursor = collection.find(findOptions, {
+    latestDocumentCursor = collection.find(finalFindOptions, {
       sort: sortOptions,
       limit: 1,
       fields: countingFields
@@ -100,7 +106,7 @@ InfiniLoad = function (collection, options) {
     };
     newDocumentCursor = collection.find({
       $and: [
-        findOptions,
+        finalFindOptions,
         newDocumentFindOptions
       ]
     }, {
@@ -162,7 +168,7 @@ InfiniLoad = function (collection, options) {
   });
 
   Meteor.publish(contentCollectionName, function(options) {
-    var oldDocumentFindOptions, oldDocumentCursor;
+    var finalFindOptions, oldDocumentFindOptions, oldDocumentCursor;
     
     if (_verbose) {
       log('Publish request', contentCollectionName, options);
@@ -186,6 +192,12 @@ InfiniLoad = function (collection, options) {
     if (_verbose) {
       log('Accepted publish request', options);
     }
+    
+    if (typeof findOptions === 'function') {
+      finalFindOptions = findOptions(this.userId);
+    } else {
+      finalFindOptions = findOptions;
+    }
 
     oldDocumentFindOptions = {};
     oldDocumentFindOptions[timeFieldName] = {
@@ -194,7 +206,7 @@ InfiniLoad = function (collection, options) {
 
     oldDocumentCursor = collection.find({
       $and: [
-        findOptions,
+        finalFindOptions,
         oldDocumentFindOptions
       ]
     }, {
