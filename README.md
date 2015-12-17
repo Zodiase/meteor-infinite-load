@@ -90,10 +90,12 @@ InfiniLoad (Server)
 InfiniLoad collection, {
   # The selector passed to `collection.find` for publishing.
   # If a function is provided instead of an object, the function will be called
-  # with the user ID as the only argument to generate the selector object.
+  # with the user ID as the first argument to generate the selector object.
   # Optional. If omitted, the empty selector will be used.
   selector: Object|Function
   # Field options passed to `collection.find` for publishing.
+  # If a function is provided instead of an object, the function will be called
+  # with the user ID as the first argument to generate the fields object.
   # Optional. If omitted, all fields will be returned.
   fields: Object
   # Name of the field used for temporal sorting.

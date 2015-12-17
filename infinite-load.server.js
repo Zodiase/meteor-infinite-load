@@ -29,7 +29,7 @@ InfiniLoad = function(collection, options) {
   // Check necessary parameters in options.
   check(options, Match.Optional(Match.ObjectIncluding({
     'selector': Match.Optional(Match.OneOf(Object, Function)),
-    'fields': Match.Optional(Object),
+    'fields': Match.Optional(Match.OneOf(Object, Function)),
     'timeFieldName': Match.Optional(String),
     'verbose': Match.Optional(Boolean),
     'slowdown': Match.Optional(Number)
@@ -173,7 +173,7 @@ InfiniLoad = function(collection, options) {
   });
 
   Meteor.publish(_contentCollName, function(options) {
-    var now, selector, oldDocSelector, oldDocCursor;
+    var now, selector, fields, oldDocSelector, oldDocCursor;
     
     if (_verbose) log('Publish request', _contentCollName, options);
     
@@ -195,6 +195,9 @@ InfiniLoad = function(collection, options) {
     selector = resolveGenerator(_selector, [this.userId]);
     if (_verbose) log('selector', selector);
 
+    fields = resolveGenerator(_fields, [this.userId]);
+    if (_verbose) log('fields', fields);
+
     oldDocSelector = {};
     oldDocSelector[_timeFieldName] = {
       '$lte': options['lastLoadTime']
@@ -208,7 +211,7 @@ InfiniLoad = function(collection, options) {
     }, {
       'sort': _sortOptions,
       'limit': options.limit,
-      'fields': _fields
+      'fields': fields
     });
 
     if (_verbose) log('Results found', oldDocCursor.count());
