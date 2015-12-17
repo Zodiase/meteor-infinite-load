@@ -1,4 +1,4 @@
-var log = function () {
+var log = function() {
   var args = [
     '<InfiniLoad>'
   ];
@@ -7,8 +7,13 @@ var log = function () {
   }
   console.log.apply(console, args);
 };
+var resolveGenerator = function(mixed, args) {
+  // If the test variable is a function, call it with the arguments and return
+  // its result. Otherwise return that variable.
+  return (typeof mixed === 'function') ? mixed.apply(null, args) : mixed;
+};
 
-InfiniLoad = function (collection, options) {
+InfiniLoad = function(collection, options) {
   "use strict";
 
   var _statsCollName, _contentCollName,
@@ -83,8 +88,7 @@ InfiniLoad = function (collection, options) {
     self = this;
     initializing = true;
     
-    selector = (typeof _selector === 'function')
-               ? _selector(this.userId) : _selector;
+    selector = resolveGenerator(_selector, [this.userId]);
     if (_verbose) log('selector', selector);
 
     totalDocCount = 0;
@@ -188,8 +192,7 @@ InfiniLoad = function (collection, options) {
 
     if (_verbose) log('Accepted publish request', options);
 
-    selector = (typeof _selector === 'function')
-               ? _selector(this.userId) : _selector;
+    selector = resolveGenerator(_selector, [this.userId]);
     if (_verbose) log('selector', selector);
 
     oldDocSelector = {};
