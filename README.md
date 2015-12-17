@@ -15,6 +15,10 @@ template.onCreated (template) ->
     @return WrappedCollection An interface object to get the data and events.
   ###
   wrappedCollection = InfiniLoad collection, {
+    # Specify the initial parameters sent to the server.
+    # This can be later changed with setter functions.
+    # Optional. Default is an empty object.
+    serverParameters: Object
     # Specify how many documents to load at first.
     # Optional. Default: 10.
     initialLimit: Number
@@ -84,14 +88,14 @@ InfiniLoad (Server)
   @param Object options Possible options are explained below.
 ###
 InfiniLoad collection, {
-  # Options passed to `collection.find` for publishing.
+  # The selector passed to `collection.find` for publishing.
   # If a function is provided instead of an object, the function will be called
-  # with the user ID as the only argument to generate the option object.
-  # Optional. If omitted, no filter will be used.
-  findOptions: Object|Function
+  # with the user ID as the only argument to generate the selector object.
+  # Optional. If omitted, the empty selector will be used.
+  selector: Object|Function
   # Field options passed to `collection.find` for publishing.
   # Optional. If omitted, all fields will be returned.
-  findFields: Object
+  fields: Object
   # Name of the field used for temporal sorting.
   # Optional. Default is 'createTime'.
   timeFieldName: String

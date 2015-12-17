@@ -11,219 +11,208 @@ var log = function () {
 InfiniLoad = function (collection, options) {
   "use strict";
 
-  var statsCollectionName, contentCollectionName, findOptions, timeFieldName,
-      sortOptions, findFields, countingFields,
-      _verbose, _slowdown;
+  var _statsCollName, _contentCollName,
+      _selector, _fields, _timeFieldName,
+      _verbose, _slowdown, // These are debug options.
+      _sortOptions, _countingFields;
 
+  // Make sure we get a valid collection.
   check(collection, Mongo.Collection);
+  _statsCollName = '__InfiniLoad-Stats-' + collection._name;
+  _contentCollName = '__InfiniLoad-Content-' + collection._name;
+  
   // Check necessary parameters in options.
   check(options, Match.Optional(Match.ObjectIncluding({
-    findOptions: Match.Optional(Match.OneOf(Object, Function)),
-    findFields: Match.Optional(Object),
-    timeFieldName: Match.Optional(String),
-    verbose: Match.Optional(Boolean),
-    slowdown: Match.Optional(Number)
+    'selector': Match.Optional(Match.OneOf(Object, Function)),
+    'fields': Match.Optional(Object),
+    'timeFieldName': Match.Optional(String),
+    'verbose': Match.Optional(Boolean),
+    'slowdown': Match.Optional(Number)
   })));
-  if (options == null) {
-    options = {};
-  }
 
-  statsCollectionName = '__InfiniLoad-Stats-' + collection._name;
-  contentCollectionName = '__InfiniLoad-Content-' + collection._name;
-  findOptions = options.findOptions ? options.findOptions : {};
-  findFields = options.findFields ? options.findFields : {};
-  timeFieldName = options.timeFieldName ? options.timeFieldName : 'createTime';
-  sortOptions = {};
-  sortOptions[timeFieldName] = -1;
-  countingFields = {};
-  countingFields[timeFieldName] = 1;
-  
-  _verbose = options.verbose ? options.verbose : false;
-  _slowdown = options.slowdown ? options.slowdown : 0;
+  options = options || {};
+
+  // Fetch options.
+  _selector = options['selector'] || {};
+  _fields = options['fields'] || {};
+  _timeFieldName = options['timeFieldName'] || 'createTime';
+  _verbose = options['verbose'] || false;
+  _slowdown = options['slowdown'] || 0;
+
+  // Prepare data based on options.
+  _sortOptions = {};
+  _sortOptions[_timeFieldName] = -1;
+  _countingFields = {};
+  _countingFields[_timeFieldName] = 1;
   
   if (_verbose) {
     log('Initializing InfiniLoad for collection', collection._name);
-    log('statsCollectionName', statsCollectionName);
-    log('contentCollectionName', contentCollectionName);
-    log('findOptions', findOptions);
-    log('findFields', findFields);
-    log('timeFieldName', timeFieldName);
-    log('sortOptions', sortOptions);
-    log('countingFields', countingFields);
+    log('_statsCollName', _statsCollName);
+    log('_contentCollName', _contentCollName);
+    log('selector', _selector);
+    log('fields', _fields);
+    log('timeFieldName', _timeFieldName);
+    log('sortOptions', _sortOptions);
+    log('countingFields', _countingFields);
   }
 
-  Meteor.publish(statsCollectionName, function(options) {
-    var now, self, initializing, finalFindOptions,
-        totalDocumentCount, totalDocumentCursor, totalDocumentHandle,
-        latestDocumentTime, latestDocumentCursor,
-        newDocumentCount, newDocumentCursor, newDocumentHandle,
-        newDocumentFindOptions,
+  Meteor.publish(_statsCollName, function(options) {
+    var now, self, initializing, selector,
+        totalDocCount, totalDocCursor, totalDocHandle,
+        latestDocTime, latestDocCursor,
+        newDocCount, newDocCursor, newDocHandle,
+        newDocSelector,
         GetReturnObject, Changed;
 
+    if (_verbose) log('Publish request', _statsCollName, options);
+
     check(options, Match.Optional(Match.ObjectIncluding({
-      lastLoadTime: Match.Optional(Number)
+      'lastLoadTime': Match.Optional(Number)
     })));
 
-    now = (new Date).getTime();
-    if (options == null) {
-      options = {};
-    }
-    if (options.lastLoadTime == null || options.lastLoadTime === 0) {
-      options.lastLoadTime = now;
-    }
+    // `Date.now()` is faster than `new Date().getTime()`.
+    now = Date.now();
+
+    options = options || {};
+
+    // If `lastLoadTime` is not specified, it is `now`.
+    options['lastLoadTime'] = options['lastLoadTime'] || now;
+
+    if (_verbose) log('Accepted publish request', options);
 
     self = this;
     initializing = true;
     
-    if (typeof findOptions === 'function') {
-      finalFindOptions = findOptions(this.userId);
-    } else {
-      finalFindOptions = findOptions;
-    }
+    selector = (typeof _selector === 'function')
+               ? _selector(this.userId) : _selector;
+    if (_verbose) log('selector', selector);
 
-    totalDocumentCount = 0;
-    totalDocumentCursor = collection.find(finalFindOptions, {
-      sort: sortOptions,
-      fields: countingFields
+    totalDocCount = 0;
+    totalDocCursor = collection.find(selector, {
+      'sort': _sortOptions,
+      'fields': _countingFields
     });
 
-    latestDocumentTime = 0;
-    latestDocumentCursor = collection.find(finalFindOptions, {
-      sort: sortOptions,
-      limit: 1,
-      fields: countingFields
+    latestDocTime = 0;
+    latestDocCursor = collection.find(selector, {
+      'sort': _sortOptions,
+      'limit': 1,
+      'fields': _countingFields
     });
-    if (latestDocumentCursor.count() === 0) {
-      latestDocumentTime = now;
+    if (latestDocCursor.count() === 0) {
+      if (_verbose) log('no result');
+      latestDocTime = now;
     } else {
-      latestDocumentTime = latestDocumentCursor.fetch()[0].createTime;
+      latestDocTime = Number(latestDocCursor.fetch()[0][_timeFieldName]) || now;
     }
 
-    newDocumentCount = 0;
-    newDocumentFindOptions = {};
-    newDocumentFindOptions[timeFieldName] = {
-      $gt: options.lastLoadTime
+    newDocCount = 0;
+    newDocSelector = {};
+    newDocSelector[_timeFieldName] = {
+      '$gt': options['lastLoadTime']
     };
-    newDocumentCursor = collection.find({
-      $and: [
-        finalFindOptions,
-        newDocumentFindOptions
+    newDocCursor = collection.find({
+      '$and': [
+        selector,
+        newDocSelector
       ]
     }, {
-      sort: sortOptions,
-      fields: countingFields
+      'sort': _sortOptions,
+      'fields': _countingFields
     });
 
     GetReturnObject = function() {
       return {
-        totalDocumentCount: totalDocumentCount,
-        latestDocumentTime: latestDocumentTime,
-        newDocumentCount: newDocumentCount
+        'totalDocCount': totalDocCount,
+        'latestDocTime': latestDocTime,
+        'newDocCount': newDocCount
       };
     };
     Changed = function() {
-      self.changed(statsCollectionName, 0, GetReturnObject());
+      self.changed(_statsCollName, 0, GetReturnObject());
     };
 
-    totalDocumentHandle = totalDocumentCursor.observeChanges({
-      added: function(id, fields) {
-        totalDocumentCount++;
-        if (fields.createTime > latestDocumentTime) {
-          latestDocumentTime = fields.createTime;
+    totalDocHandle = totalDocCursor.observeChanges({
+      'added': function(id, fields) {
+        totalDocCount++;
+        if (fields.createTime > latestDocTime) {
+          latestDocTime = fields.createTime;
         }
-        if (initializing) {
-          return;
-        }
-        Changed();
+        if (!initializing) Changed();
       },
-      removed: function(id) {
-        totalDocumentCount--;
+      'removed': function(id) {
+        totalDocCount--;
         Changed();
       }
     });
-    newDocumentHandle = newDocumentCursor.observeChanges({
-      added: function(id) {
-        newDocumentCount++;
-        if (initializing) {
-          return;
-        }
-        Changed();
+    newDocHandle = newDocCursor.observeChanges({
+      'added': function(id) {
+        newDocCount++;
+        if (!initializing) Changed();
       },
-      removed: function(id) {
-        newDocumentCount--;
+      'removed': function(id) {
+        newDocCount--;
         Changed();
       }
     });
 
     initializing = false;
-    self.added(statsCollectionName, 0, GetReturnObject());
+    self.added(_statsCollName, 0, GetReturnObject());
     self.ready();
 
     self.onStop(function() {
-      totalDocumentHandle.stop();
-      newDocumentHandle.stop();
+      totalDocHandle.stop();
+      newDocHandle.stop();
     });
 
     return;
   });
 
-  Meteor.publish(contentCollectionName, function(options) {
-    var finalFindOptions, oldDocumentFindOptions, oldDocumentCursor;
+  Meteor.publish(_contentCollName, function(options) {
+    var now, selector, oldDocSelector, oldDocCursor;
     
-    if (_verbose) {
-      log('Publish request', contentCollectionName, options);
-    }
+    if (_verbose) log('Publish request', _contentCollName, options);
     
     check(options, Match.Optional(Match.ObjectIncluding({
-      limit: Match.Optional(Number),
-      lastLoadTime: Match.Optional(Number)
+      'limit': Match.Optional(Number),
+      'lastLoadTime': Match.Optional(Number)
     })));
 
-    if (options == null) {
-      options = {};
-    }
-    if (options.limit == null) {
-      options.limit = 0;
-    }
-    if (options.lastLoadTime == null) {
-      options.lastLoadTime = (new Date).getTime();
-    }
-    
-    if (_verbose) {
-      log('Accepted publish request', options);
-    }
-    
-    if (typeof findOptions === 'function') {
-      finalFindOptions = findOptions(this.userId);
-    } else {
-      finalFindOptions = findOptions;
-    }
+    // `Date.now()` is faster than `new Date().getTime()`.
+    now = Date.now();
 
-    oldDocumentFindOptions = {};
-    oldDocumentFindOptions[timeFieldName] = {
-      $lte: options.lastLoadTime
+    options = options || {};
+
+    options['limit'] = options['limit'] || 0;
+    options['lastLoadTime'] = options['lastLoadTime'] || now
+
+    if (_verbose) log('Accepted publish request', options);
+
+    selector = (typeof _selector === 'function')
+               ? _selector(this.userId) : _selector;
+    if (_verbose) log('selector', selector);
+
+    oldDocSelector = {};
+    oldDocSelector[_timeFieldName] = {
+      '$lte': options['lastLoadTime']
     };
 
-    oldDocumentCursor = collection.find({
-      $and: [
-        finalFindOptions,
-        oldDocumentFindOptions
+    oldDocCursor = collection.find({
+      '$and': [
+        selector,
+        oldDocSelector
       ]
     }, {
-      sort: sortOptions,
-      limit: options.limit,
-      fields: findFields
+      'sort': _sortOptions,
+      'limit': options.limit,
+      'fields': _fields
     });
 
-    if (_verbose) {
-      log('Results found', oldDocumentCursor.count());
-    }
+    if (_verbose) log('Results found', oldDocCursor.count());
 
-    if (_slowdown > 0) {
-      Meteor._sleepForMs(_slowdown);
-    }
+    if (_slowdown > 0) Meteor._sleepForMs(_slowdown);
 
-    return oldDocumentCursor;
+    return oldDocCursor;
   });
   return;
 };

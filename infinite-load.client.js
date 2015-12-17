@@ -16,17 +16,17 @@ InfiniLoad = function (collection, options) {
       _onReady, _onUpdate,
       _verbose,
       _initialLimit, _limitIncrement,
-      _statsCollectionName, _contentCollectionName,
+      _statsCollName, _contentCollName,
       _Stats,
-      _newDocumentCount, _totalDocumentCount,
-      _latestDocumentTime, _lastLoadTime, _listLoadLimit, _loadOptions,
+      _newDocCount, _totalDocCount,
+      _latestDocTime, _lastLoadTime, _listLoadLimit, _loadOptions,
       _computations, _subscriptions,
-      _onContentSubscribed,
+      _onStatsSubscribed, _onContentSubscribed,
       _UpdateLoadOptions, _UpdateLoadOptions_NonReactive,
-      _GetOldDocumentCount,
-      _GetTotalDocumentCount,
-      _GetNewDocumentCount, _HasMoreDocuments, _LoadMoreDocuments,
-      _LoadNewDocuments,
+      _GetOldDocCount,
+      _GetTotalDocCount,
+      _GetNewDocCount, _HasMoreDocs, _LoadMoreDocs,
+      _LoadNewDocs,
       _Stop,
       _API;
 
@@ -57,22 +57,22 @@ InfiniLoad = function (collection, options) {
   _initialLimit = options.initialLimit ? options.initialLimit : 10;
   _limitIncrement = options.limitIncrement ? options.limitIncrement : _initialLimit;
 
-  _statsCollectionName = '__InfiniLoad-Stats-' + collection._name;
-  _contentCollectionName = '__InfiniLoad-Content-' + collection._name;
+  _statsCollName = '__InfiniLoad-Stats-' + collection._name;
+  _contentCollName = '__InfiniLoad-Content-' + collection._name;
 
   if (_verbose) {
     log('Initializing InfiniLoad for collection', collection._name);
-    log('statsCollectionName', _statsCollectionName);
-    log('contentCollectionName', _contentCollectionName);
+    log('statsCollName', _statsCollName);
+    log('contentCollName', _contentCollName);
     log('initialLimit', _initialLimit);
     log('limitIncrement', _limitIncrement);
   }
 
-  _Stats = new Mongo.Collection(_statsCollectionName)
+  _Stats = new Mongo.Collection(_statsCollName)
 
-  _newDocumentCount = new ReactiveVar(0);
-  _totalDocumentCount = new ReactiveVar(0);
-  _latestDocumentTime = new ReactiveVar(0);
+  _newDocCount = new ReactiveVar(0);
+  _totalDocCount = new ReactiveVar(0);
+  _latestDocTime = new ReactiveVar(0);
   _lastLoadTime = new ReactiveVar(0);
   _listLoadLimit = new ReactiveVar(_initialLimit);
   _loadOptions = new ReactiveVar(null);
@@ -96,37 +96,37 @@ InfiniLoad = function (collection, options) {
   
   // React to: (If used in a computation)
   // - collection
-  _GetOldDocumentCount = function() {
+  _GetOldDocCount = function() {
     return collection.find({}).count()
   };
   
   // React to: (If used in a computation)
-  // - _totalDocumentCount
-  _GetTotalDocumentCount = function() {
-    return _totalDocumentCount.get();
+  // - _totalDocCount
+  _GetTotalDocCount = function() {
+    return _totalDocCount.get();
   };
   
   // React to: (If used in a computation)
-  // - _newDocumentCount
-  _GetNewDocumentCount = function() {
-    return _newDocumentCount.get();
+  // - _newDocCount
+  _GetNewDocCount = function() {
+    return _newDocCount.get();
   };
 
   // React to: (If used in a computation)
-  // - _totalDocumentCount
-  // - _newDocumentCount
+  // - _totalDocCount
+  // - _newDocCount
   // - _listLoadLimit
-  _HasMoreDocuments = function() {
-    var listLoadLimit, newDocumentCount, totalDocumentCount;
-    totalDocumentCount = _totalDocumentCount.get();
-    newDocumentCount = _newDocumentCount.get();
+  _HasMoreDocs = function() {
+    var listLoadLimit, newDocCount, totalDocCount;
+    totalDocCount = _totalDocCount.get();
+    newDocCount = _newDocCount.get();
     listLoadLimit = _listLoadLimit.get();
-    return listLoadLimit < (totalDocumentCount - newDocumentCount);
+    return listLoadLimit < (totalDocCount - newDocCount);
   };
 
   // React to: (If used in a computation)
   // - _listLoadLimit
-  _LoadMoreDocuments = function(limitIncrement) {
+  _LoadMoreDocs = function(limitIncrement) {
     var listLoadLimit;
     listLoadLimit = _listLoadLimit.get();
     listLoadLimit += limitIncrement ? limitIncrement : _limitIncrement;
@@ -135,20 +135,24 @@ InfiniLoad = function (collection, options) {
   };
 
   // React to: (If used in a computation)
-  // - _latestDocumentTime
+  // - _latestDocTime
   // - _lastLoadTime
   // - _listLoadLimit
-  // - _newDocumentCount
-  _LoadNewDocuments = function() {
-    var lastLoadTime, latestDocumentTime, listLoadLimit, newDocumentCount;
-    latestDocumentTime = _latestDocumentTime.get();
+  // - _newDocCount
+  _LoadNewDocs = function() {
+    var lastLoadTime, latestDocTime, listLoadLimit, newDocCount;
+    latestDocTime = _latestDocTime.get();
     lastLoadTime = _lastLoadTime.get();
     listLoadLimit = _listLoadLimit.get();
-    newDocumentCount = _newDocumentCount.get();
-    listLoadLimit += newDocumentCount;
-    _lastLoadTime.set(latestDocumentTime);
+    newDocCount = _newDocCount.get();
+    listLoadLimit += newDocCount;
+    _lastLoadTime.set(latestDocTime);
     _listLoadLimit.set(listLoadLimit);
     _UpdateLoadOptions_NonReactive();
+  };
+
+  _onStatsSubscribed = function () {
+    if (_verbose) log('Stats subscription ready');
   };
 
   // Subscribe to the latest stats by last load time.
@@ -160,7 +164,10 @@ InfiniLoad = function (collection, options) {
     parameters = {
       lastLoadTime: lastLoadTime
     };
-    _subscriptions['stats'] = _subscriber.subscribe(_statsCollectionName, parameters);
+    if (_verbose) {
+      log('Subscribing status', parameters);
+    }
+    _subscriptions['stats'] = _subscriber.subscribe(_statsCollName, parameters, _onStatsSubscribed);
   });
 
   // When new stats come in, update the records.
@@ -175,20 +182,20 @@ InfiniLoad = function (collection, options) {
     if (_verbose) {
       log('Stats updated', stats);
     }
-    _newDocumentCount.set(stats.newDocumentCount);
-    _totalDocumentCount.set(stats.totalDocumentCount);
-    _latestDocumentTime.set(stats.latestDocumentTime);
+    _newDocCount.set(stats['newDocCount']);
+    _totalDocCount.set(stats['totalDocCount']);
+    _latestDocTime.set(stats['latestDocTime']);
   });
 
   // When the latest document time comes in (for the first time),
   // set the last load time to load documents.
   // React to:
-  // - _latestDocumentTime
+  // - _latestDocTime
   _computations['setLastLoadTime'] = _tracker.autorun(function(comp) {
-    var latestDocumentTime;
-    latestDocumentTime = _latestDocumentTime.get();
-    if (latestDocumentTime > 0) {
-      _lastLoadTime.set(latestDocumentTime);
+    var latestDocTime;
+    latestDocTime = _latestDocTime.get();
+    if (latestDocTime > 0) {
+      _lastLoadTime.set(latestDocTime);
       _UpdateLoadOptions_NonReactive();
       comp.stop();
     }
@@ -222,7 +229,7 @@ InfiniLoad = function (collection, options) {
     if (parameters.lastLoadTime === 0) {
       return;
     }
-    _subscriptions['content'] = _subscriber.subscribe(_contentCollectionName, parameters, _onContentSubscribed);
+    _subscriptions['content'] = _subscriber.subscribe(_contentCollName, parameters, _onContentSubscribed);
   });
 
   _Stop = function() {
@@ -240,12 +247,12 @@ InfiniLoad = function (collection, options) {
 
   _API = {
     'find': collection.find.bind(collection),
-    'count': _GetOldDocumentCount,
-    'countNew': _GetNewDocumentCount,
-    'hasMore': _HasMoreDocuments,
-    'loadMore': _LoadMoreDocuments,
-    'loadNew': _LoadNewDocuments,
-    'countTotal': _GetTotalDocumentCount
+    'count': _GetOldDocCount,
+    'countNew': _GetNewDocCount,
+    'hasMore': _HasMoreDocs,
+    'loadMore': _LoadMoreDocs,
+    'loadNew': _LoadNewDocs,
+    'countTotal': _GetTotalDocCount
   };
 
   // If a template instance is not provided, the `stop` method has to be
