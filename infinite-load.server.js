@@ -72,6 +72,7 @@ InfiniLoad = function(collection, options) {
     if (_verbose) log('Publish request', _statsCollName, options);
 
     check(options, Match.Optional(Match.ObjectIncluding({
+      'args': Match.Optional(Object),
       'lastLoadTime': Match.Optional(Number)
     })));
 
@@ -80,6 +81,7 @@ InfiniLoad = function(collection, options) {
 
     options = options || {};
 
+    options['args'] = options['args'] || {};
     // If `lastLoadTime` is not specified, it is `now`.
     options['lastLoadTime'] = options['lastLoadTime'] || now;
 
@@ -88,7 +90,7 @@ InfiniLoad = function(collection, options) {
     self = this;
     initializing = true;
     
-    selector = resolveGenerator(_selector, [this.userId]);
+    selector = resolveGenerator(_selector, [this.userId, options['args']]);
     if (_verbose) log('selector', selector);
 
     totalDocCount = 0;
@@ -178,6 +180,7 @@ InfiniLoad = function(collection, options) {
     if (_verbose) log('Publish request', _contentCollName, options);
     
     check(options, Match.Optional(Match.ObjectIncluding({
+      'args': Match.Optional(Object),
       'limit': Match.Optional(Number),
       'lastLoadTime': Match.Optional(Number)
     })));
@@ -187,15 +190,16 @@ InfiniLoad = function(collection, options) {
 
     options = options || {};
 
+    options['args'] = options['args'] || {};
     options['limit'] = options['limit'] || 0;
     options['lastLoadTime'] = options['lastLoadTime'] || now
 
     if (_verbose) log('Accepted publish request', options);
 
-    selector = resolveGenerator(_selector, [this.userId]);
+    selector = resolveGenerator(_selector, [this.userId, options['args']]);
     if (_verbose) log('selector', selector);
 
-    fields = resolveGenerator(_fields, [this.userId]);
+    fields = resolveGenerator(_fields, [this.userId, options['args']]);
     if (_verbose) log('fields', fields);
 
     oldDocSelector = {};

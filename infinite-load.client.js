@@ -15,9 +15,11 @@ InfiniLoad = function (collection, options) {
       _tracker, _subscriber,
       _onReady, _onUpdate,
       _verbose,
+      _serverParameters,
       _initialLimit, _limitIncrement,
       _statsCollName, _contentCollName,
       _Stats,
+      _serverArgs,
       _newDocCount, _totalDocCount,
       _latestDocTime, _lastLoadTime, _listLoadLimit, _loadOptions,
       _computations, _subscriptions,
@@ -27,18 +29,24 @@ InfiniLoad = function (collection, options) {
       _GetTotalDocCount,
       _GetNewDocCount, _HasMoreDocs, _LoadMoreDocs,
       _LoadNewDocs,
+      _SetServerParameters,
       _Stop,
       _API;
 
+  // Make sure we get a valid collection.
   check(collection, Mongo.Collection);
+  _statsCollName = '__InfiniLoad-Stats-' + collection['_name'];
+  _contentCollName = '__InfiniLoad-Content-' + collection['_name'];
+
   // Check necessary parameters in options.
   check(options, Match.Optional(Match.ObjectIncluding({
-    initialLimit: Match.Optional(Number),
-    limitIncrement: Match.Optional(Number),
-    tpl: Match.Optional(Blaze.TemplateInstance),
-    onReady: Match.Optional(Function),
-    onUpdate: Match.Optional(Function),
-    verbose: Match.Optional(Boolean)
+    'serverParameters': Match.Optional(Object),
+    'initialLimit': Match.Optional(Number),
+    'limitIncrement': Match.Optional(Number),
+    'tpl': Match.Optional(Blaze.TemplateInstance),
+    'onReady': Match.Optional(Function),
+    'onUpdate': Match.Optional(Function),
+    'verbose': Match.Optional(Boolean)
   })));
   if (options == null) {
     options = {};
@@ -46,22 +54,18 @@ InfiniLoad = function (collection, options) {
 
   _initialDataReady = false;
 
-  _tracker = options.tpl ? options.tpl : Tracker;
-  _subscriber = options.tpl ? options.tpl : Meteor;
-
-  _onReady = options.onReady ? options.onReady : null;
-  _onUpdate = options.onUpdate ? options.onUpdate : null;
-
-  _verbose = options.verbose ? options.verbose : false;
-
-  _initialLimit = options.initialLimit ? options.initialLimit : 10;
-  _limitIncrement = options.limitIncrement ? options.limitIncrement : _initialLimit;
-
-  _statsCollName = '__InfiniLoad-Stats-' + collection._name;
-  _contentCollName = '__InfiniLoad-Content-' + collection._name;
+  // Fetch options.
+  _tracker = options['tpl'] || Tracker;
+  _subscriber = options['tpl'] || Meteor;
+  _onReady = options['onReady'] || null;
+  _onUpdate = options['onUpdate'] || null;
+  _verbose = options['verbose'] || false;
+  _serverParameters = options['serverParameters'] || {};
+  _initialLimit = options['initialLimit'] || 10;
+  _limitIncrement = options['limitIncrement'] || _initialLimit;
 
   if (_verbose) {
-    log('Initializing InfiniLoad for collection', collection._name);
+    log('Initializing InfiniLoad for collection', collection['_name']);
     log('statsCollName', _statsCollName);
     log('contentCollName', _contentCollName);
     log('initialLimit', _initialLimit);
@@ -70,6 +74,7 @@ InfiniLoad = function (collection, options) {
 
   _Stats = new Mongo.Collection(_statsCollName)
 
+  _serverArgs = new ReactiveVar(_serverParameters);
   _newDocCount = new ReactiveVar(0);
   _totalDocCount = new ReactiveVar(0);
   _latestDocTime = new ReactiveVar(0);
@@ -85,8 +90,9 @@ InfiniLoad = function (collection, options) {
   // - _lastLoadTime
   _UpdateLoadOptions = function() {
     _loadOptions.set({
-      limit: _listLoadLimit.get(),
-      lastLoadTime: _lastLoadTime.get()
+      'args': _serverArgs.get(),
+      'limit': _listLoadLimit.get(),
+      'lastLoadTime': _lastLoadTime.get()
     });
   };
   _UpdateLoadOptions_NonReactive = function() {
@@ -129,7 +135,7 @@ InfiniLoad = function (collection, options) {
   _LoadMoreDocs = function(limitIncrement) {
     var listLoadLimit;
     listLoadLimit = _listLoadLimit.get();
-    listLoadLimit += limitIncrement ? limitIncrement : _limitIncrement;
+    listLoadLimit += limitIncrement || _limitIncrement;
     _listLoadLimit.set(listLoadLimit);
     _UpdateLoadOptions_NonReactive();
   };
@@ -150,6 +156,11 @@ InfiniLoad = function (collection, options) {
     _listLoadLimit.set(listLoadLimit);
     _UpdateLoadOptions_NonReactive();
   };
+  
+  _SetServerParameters = function(value) {
+    check(value, Object);
+    _serverArgs.set(value);
+  };
 
   _onStatsSubscribed = function () {
     if (_verbose) log('Stats subscription ready');
@@ -157,16 +168,17 @@ InfiniLoad = function (collection, options) {
 
   // Subscribe to the latest stats by last load time.
   // React to:
+  // - _serverArgs
   // - _lastLoadTime
   _computations['subscribeStats'] = _tracker.autorun(function(comp) {
-    var lastLoadTime, parameters;
+    var serverArgs, lastLoadTime, parameters;
+    serverArgs = _serverArgs.get();
     lastLoadTime = _lastLoadTime.get();
     parameters = {
-      lastLoadTime: lastLoadTime
+      'args': serverArgs,
+      'lastLoadTime': lastLoadTime
     };
-    if (_verbose) {
-      log('Subscribing status', parameters);
-    }
+    if (_verbose) log('Subscribing status', parameters);
     _subscriptions['stats'] = _subscriber.subscribe(_statsCollName, parameters, _onStatsSubscribed);
   });
 
@@ -176,12 +188,9 @@ InfiniLoad = function (collection, options) {
   _computations['saveStats'] = _tracker.autorun(function(comp) {
     var stats;
     stats = _Stats.find(0).fetch()[0];
-    if (!stats) {
-      return;
-    }
-    if (_verbose) {
-      log('Stats updated', stats);
-    }
+    if (!stats) return;
+    //else
+    if (_verbose) log('Stats updated', stats);
     _newDocCount.set(stats['newDocCount']);
     _totalDocCount.set(stats['totalDocCount']);
     _latestDocTime.set(stats['latestDocTime']);
@@ -223,12 +232,9 @@ InfiniLoad = function (collection, options) {
   _computations['subscribeContent'] = _tracker.autorun(function(comp) {
     var parameters;
     parameters = _loadOptions.get();
-    if (_verbose) {
-      log('Data subscription parameters', parameters);
-    }
-    if (parameters.lastLoadTime === 0) {
-      return;
-    }
+    if (_verbose) log('Data subscription parameters', parameters);
+    if (parameters['lastLoadTime'] === 0) return;
+    //else
     _subscriptions['content'] = _subscriber.subscribe(_contentCollName, parameters, _onContentSubscribed);
   });
 
@@ -252,12 +258,13 @@ InfiniLoad = function (collection, options) {
     'hasMore': _HasMoreDocs,
     'loadMore': _LoadMoreDocs,
     'loadNew': _LoadNewDocs,
-    'countTotal': _GetTotalDocCount
+    'countTotal': _GetTotalDocCount,
+    'setServerParameters': _SetServerParameters
   };
 
   // If a template instance is not provided, the `stop` method has to be
   // provided so the user can stop all the subscriptions and computations.
-  if (!options.tpl) {
+  if (!options['tpl']) {
     _API['stop'] = _Stop
   }
 
