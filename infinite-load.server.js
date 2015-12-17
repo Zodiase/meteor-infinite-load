@@ -139,8 +139,8 @@ InfiniLoad = function(collection, options) {
     totalDocHandle = totalDocCursor.observeChanges({
       'added': function(id, fields) {
         totalDocCount++;
-        if (fields.createTime > latestDocTime) {
-          latestDocTime = fields.createTime;
+        if (fields[_timeFieldName] > latestDocTime) {
+          latestDocTime = fields[_timeFieldName];
         }
         if (!initializing) Changed();
       },
