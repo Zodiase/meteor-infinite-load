@@ -17,9 +17,9 @@ InfiniLoad = function(collection, options) {
   "use strict";
 
   var _statsCollName, _contentCollName,
-      _selector, _fields, _timeFieldName,
+      _selector, _sort, _fields, _timeFieldName,
       _verbose, _slowdown, // These are debug options.
-      _sortOptions, _countingFields;
+      _countingSort, _countingFields;
 
   // Make sure we get a valid collection.
   check(collection, Mongo.Collection);
@@ -29,6 +29,7 @@ InfiniLoad = function(collection, options) {
   // Check necessary parameters in options.
   check(options, Match.Optional(Match.ObjectIncluding({
     'selector': Match.Optional(Match.OneOf(Object, Function)),
+    'sort': Match.Optional(Match.OneOf(Object, Function)),
     'fields': Match.Optional(Match.OneOf(Object, Function)),
     'timeFieldName': Match.Optional(String),
     'verbose': Match.Optional(Boolean),
@@ -39,14 +40,16 @@ InfiniLoad = function(collection, options) {
 
   // Fetch options.
   _selector = options['selector'] || {};
+  _sort = options['sort'] || {};
   _fields = options['fields'] || {};
   _timeFieldName = options['timeFieldName'] || 'createTime';
   _verbose = options['verbose'] || false;
   _slowdown = options['slowdown'] || 0;
 
-  // Prepare data based on options.
-  _sortOptions = {};
-  _sortOptions[_timeFieldName] = -1;
+  // Sort options for counting and detecting new documents.
+  _countingSort = {};
+  _countingSort[_timeFieldName] = -1;
+  // Fields to return for counting documents.
   _countingFields = {};
   _countingFields[_timeFieldName] = 1;
   
@@ -55,9 +58,10 @@ InfiniLoad = function(collection, options) {
     log('_statsCollName', _statsCollName);
     log('_contentCollName', _contentCollName);
     log('selector', _selector);
+    log('sort', _sort);
     log('fields', _fields);
     log('timeFieldName', _timeFieldName);
-    log('sortOptions', _sortOptions);
+    log('countingSort', _countingSort);
     log('countingFields', _countingFields);
   }
 
@@ -95,13 +99,13 @@ InfiniLoad = function(collection, options) {
 
     totalDocCount = 0;
     totalDocCursor = collection.find(selector, {
-      'sort': _sortOptions,
+      'sort': _countingSort,
       'fields': _countingFields
     });
 
     latestDocTime = 0;
     latestDocCursor = collection.find(selector, {
-      'sort': _sortOptions,
+      'sort': _countingSort,
       'limit': 1,
       'fields': _countingFields
     });
@@ -123,7 +127,7 @@ InfiniLoad = function(collection, options) {
         newDocSelector
       ]
     }, {
-      'sort': _sortOptions,
+      'sort': _countingSort,
       'fields': _countingFields
     });
 
@@ -175,7 +179,7 @@ InfiniLoad = function(collection, options) {
   });
 
   Meteor.publish(_contentCollName, function(options) {
-    var now, selector, fields, oldDocSelector, oldDocCursor;
+    var now, selector, sort, fields, oldDocSelector, oldDocCursor;
     
     if (_verbose) log('Publish request', _contentCollName, options);
     
@@ -199,6 +203,10 @@ InfiniLoad = function(collection, options) {
     selector = resolveGenerator(_selector, [this.userId, options['args']]);
     if (_verbose) log('selector', selector);
 
+    sort = resolveGenerator(_sort, [this.userId, options['args']]);
+    sort[_timeFieldName] = -1;
+    if (_verbose) log('sort', sort);
+
     fields = resolveGenerator(_fields, [this.userId, options['args']]);
     if (_verbose) log('fields', fields);
 
@@ -213,7 +221,7 @@ InfiniLoad = function(collection, options) {
         oldDocSelector
       ]
     }, {
-      'sort': _sortOptions,
+      'sort': sort,
       'limit': options.limit,
       'fields': fields
     });
