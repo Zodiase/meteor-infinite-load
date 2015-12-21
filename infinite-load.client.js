@@ -254,6 +254,7 @@ InfiniLoad = function (collection, options) {
 
   _API = {
     'find': collection.find.bind(collection),
+    'findOne': collection.findOne.bind(collection),
     'count': _GetOldDocCount,
     'countNew': _GetNewDocCount,
     'hasMore': _HasMoreDocs,

@@ -49,6 +49,10 @@ template.onCreated (template) ->
   # Reactive.
   visibleDocumentCursor = wrappedCollection.find(filter, options)
 
+  # A shortcut to the original `collection.findOne`.
+  # Reactive.
+  visibleDocument = wrappedCollection.findOne(filter, options)
+
   # Get the number of documents that have been loaded.
   # Reactive.
   loadedDocumentCount = wrappedCollection.count()
