@@ -160,6 +160,7 @@ InfiniLoad = function (collection, options) {
   _SetServerParameters = function(value) {
     check(value, Object);
     _serverArgs.set(value);
+    _UpdateLoadOptions_NonReactive();
   };
 
   _onStatsSubscribed = function () {
