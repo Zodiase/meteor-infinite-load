@@ -15,29 +15,36 @@ template.onCreated (template) ->
     @return WrappedCollection An interface object to get the data and events.
   ###
   wrappedCollection = InfiniLoad collection, {
+    
     # Specify the initial parameters sent to the server.
     # This can be later changed with setter functions.
     # Optional. Default is an empty object.
     serverParameters: Object
+    
     # Specify how many documents to load at first.
     # Optional. Default: 10.
     initialLimit: Number
+    
     # Specify how many documents to load every time using `loadMore`.
     # Optional. Default: Same as `initialLimit`.
     limitIncrement: Number
+    
     # Specify a template instance to be associated with all the computations and
     #   subscriptions.
     # Optional. If not specified, `Tracker` and `Meteor` will be used, which means
     #   some clean-up needs to be done. See more details below.
     tpl: template
+    
     # Specify a function to be called when the collection has been loaded for the
     #   first time.
     # Optional.
     onReady: Function
+    
     # Specify a function to be called when the collection has been updated.
     # This typically happens after calling `loadMore` or `loadNew`.
     # Optional.
     onUpdate: Function
+    
     # Set to true to show detailed logs.
     # Optional. Default is false.
     verbose: Boolean
@@ -98,6 +105,7 @@ InfiniLoad collection, {
   # as the second argument to generate the selector object.
   # Optional. If omitted, the empty selector will be used.
   selector: Object|Function
+  
   # Sort options passed to `collection.find` for publishing.
   # If a function is provided instead of an object, the function will be called
   # with the user ID as the first argument and the parameters passed from client
@@ -106,18 +114,31 @@ InfiniLoad collection, {
   # Optional. If omitted, no extra sorting will be done other than the basic
   # temporal sort.
   sort: Object|Function
+  
   # Field options passed to `collection.find` for publishing.
   # If a function is provided instead of an object, the function will be called
   # with the user ID as the first argument and the parameters passed from client
   # as the second argument to generate the fields object.
   # Optional. If omitted, all fields will be returned.
   fields: Object|Function
+  
   # Name of the field used for temporal sorting.
   # Optional. Default is 'createTime'.
   timeFieldName: String
+  
+  # Function for affiliating extra data from other collections to this
+  # subscription. The function will be called with the data cursor to be
+  # published as the first argument and is expected to return another cursor or
+  # an array of cursors which are going to be published at the same time.
+  # Optional. If omitted, does nothing.
+  # Note that as a limitation still present as of Meteor 1.2, it is not allowed
+  # to return multiple cursors of the same collection.
+  affiliation: Function
+  
   # Set to true to show detailed logs.
   # Optional. Default is false.
   verbose: Boolean
+  
   # Simulate slow connection by sleeping the specified amount of time before
   #   returning.
   # Optional. Default is 0 and thus does not sleep.
