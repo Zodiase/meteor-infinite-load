@@ -105,13 +105,13 @@ InfiniLoad collection, {
   # before the basic temporal sort.
   # Optional. If omitted, no extra sorting will be done other than the basic
   # temporal sort.
-  sort: Object
+  sort: Object|Function
   # Field options passed to `collection.find` for publishing.
   # If a function is provided instead of an object, the function will be called
   # with the user ID as the first argument and the parameters passed from client
   # as the second argument to generate the fields object.
   # Optional. If omitted, all fields will be returned.
-  fields: Object
+  fields: Object|Function
   # Name of the field used for temporal sorting.
   # Optional. Default is 'createTime'.
   timeFieldName: String
