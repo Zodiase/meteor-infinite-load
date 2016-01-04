@@ -91,21 +91,21 @@ InfiniLoad = function (collection, options) {
   // React to: (If used in a computation)
   // - _listLoadLimit
   // - _lastLoadTime
-  _UpdateLoadOptions = function() {
+  _UpdateLoadOptions = function () {
     _loadOptions.set({
       'args': _serverArgs.get(),
       'limit': _listLoadLimit.get(),
       'lastLoadTime': _lastLoadTime.get()
     });
   };
-  _UpdateLoadOptions_NonReactive = function() {
+  _UpdateLoadOptions_NonReactive = function () {
     Tracker.nonreactive(_UpdateLoadOptions);
   };
   _UpdateLoadOptions_NonReactive();
 
   // React to: (If used in a computation)
   // - collection
-  _GetLoadedDocCount = function() {
+  _GetLoadedDocCount = function () {
     return collection.find({}).count()
   };
 
@@ -113,7 +113,7 @@ InfiniLoad = function (collection, options) {
   // - _totalDocCount
   // - _newDocCount
   // - _listLoadLimit
-  _GetToLoadDocCount = function() {
+  _GetToLoadDocCount = function () {
     var listLoadLimit, newDocCount, totalDocCount;
     totalDocCount = _totalDocCount.get();
     newDocCount = _newDocCount.get();
@@ -123,31 +123,31 @@ InfiniLoad = function (collection, options) {
 
   // React to: (If used in a computation)
   // - _newDocCount
-  _GetNewDocCount = function() {
+  _GetNewDocCount = function () {
     return _newDocCount.get();
   };
 
   // React to: (If used in a computation)
   // - _totalDocCount
-  _GetTotalDocCount = function() {
+  _GetTotalDocCount = function () {
     return _totalDocCount.get();
   };
 
   // React to: (If used in a computation)
   // (Refer to _GetToLoadDocCount)
-  _HasMoreDocs = function() {
+  _HasMoreDocs = function () {
     return _GetToLoadDocCount() > 0;
   };
 
   // React to: (If used in a computation)
   // (Refer to _GetNewDocCount)
-  _HasNewDocs = function() {
+  _HasNewDocs = function () {
     return _GetNewDocCount() > 0;
   };
 
   // React to: (If used in a computation)
   // - _listLoadLimit
-  _LoadMoreDocs = function(limitIncrement) {
+  _LoadMoreDocs = function (limitIncrement) {
     var listLoadLimit;
     listLoadLimit = _listLoadLimit.get();
     listLoadLimit += limitIncrement || _limitIncrement;
@@ -160,7 +160,7 @@ InfiniLoad = function (collection, options) {
   // - _lastLoadTime
   // - _listLoadLimit
   // - _newDocCount
-  _LoadNewDocs = function() {
+  _LoadNewDocs = function () {
     var lastLoadTime, latestDocTime, listLoadLimit, newDocCount;
     latestDocTime = _latestDocTime.get();
     lastLoadTime = _lastLoadTime.get();
@@ -172,7 +172,7 @@ InfiniLoad = function (collection, options) {
     _UpdateLoadOptions_NonReactive();
   };
 
-  _SetServerParameters = function(value) {
+  _SetServerParameters = function (value) {
     check(value, Object);
     _serverArgs.set(value);
     _UpdateLoadOptions_NonReactive();
@@ -186,7 +186,7 @@ InfiniLoad = function (collection, options) {
   // React to:
   // - _serverArgs
   // - _lastLoadTime
-  _computations['subscribeStats'] = _tracker.autorun(function(comp) {
+  _computations['subscribeStats'] = _tracker.autorun(function (comp) {
     var serverArgs, lastLoadTime, parameters;
     serverArgs = _serverArgs.get();
     lastLoadTime = _lastLoadTime.get();
@@ -201,7 +201,7 @@ InfiniLoad = function (collection, options) {
   // When new stats come in, update the records.
   // React to:
   // - _Stats
-  _computations['saveStats'] = _tracker.autorun(function(comp) {
+  _computations['saveStats'] = _tracker.autorun(function (comp) {
     var stats;
     stats = _Stats.find(0).fetch()[0];
     if (!stats) return;
@@ -216,7 +216,7 @@ InfiniLoad = function (collection, options) {
   // set the last load time to load documents.
   // React to:
   // - _latestDocTime
-  _computations['setLastLoadTime'] = _tracker.autorun(function(comp) {
+  _computations['setLastLoadTime'] = _tracker.autorun(function (comp) {
     var latestDocTime;
     latestDocTime = _latestDocTime.get();
     if (latestDocTime > 0) {
@@ -245,7 +245,7 @@ InfiniLoad = function (collection, options) {
   // Subscribe to the content with those load options.
   // React to:
   // - _loadOptions
-  _computations['subscribeContent'] = _tracker.autorun(function(comp) {
+  _computations['subscribeContent'] = _tracker.autorun(function (comp) {
     var parameters;
     parameters = _loadOptions.get();
     if (_verbose) log('Data subscription parameters', parameters);
@@ -254,7 +254,7 @@ InfiniLoad = function (collection, options) {
     _subscriptions['content'] = _subscriber.subscribe(_contentCollName, parameters, _onContentSubscribed);
   });
 
-  _Stop = function() {
+  _Stop = function () {
     // Stop all computations.
     for (let comp of _computations) {
       if (!comp.stopped) {
