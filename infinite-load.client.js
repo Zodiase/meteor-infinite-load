@@ -12,6 +12,7 @@ InfiniLoad = function (collection, options) {
   "use strict";
 
   var _initialDataReady,
+      _pubId,
       _tracker, _subscriber,
       _onReady, _onUpdate,
       _verbose,
@@ -35,11 +36,10 @@ InfiniLoad = function (collection, options) {
 
   // Make sure we get a valid collection.
   check(collection, Mongo.Collection);
-  _statsCollName = '__InfiniLoad-Stats-' + collection['_name'];
-  _contentCollName = '__InfiniLoad-Content-' + collection['_name'];
 
   // Check necessary parameters in options.
   check(options, Match.Optional(Match.ObjectIncluding({
+    'id': Match.Optional(String),
     'serverParameters': Match.Optional(Object),
     'initialLimit': Match.Optional(Number),
     'limitIncrement': Match.Optional(Number),
@@ -48,13 +48,13 @@ InfiniLoad = function (collection, options) {
     'onUpdate': Match.Optional(Function),
     'verbose': Match.Optional(Boolean)
   })));
-  if (options == null) {
-    options = {};
-  }
+
+  options = options || {};
 
   _initialDataReady = false;
 
   // Fetch options.
+  _pubId = options['id'] || '';
   _tracker = options['tpl'] || Tracker;
   _subscriber = options['tpl'] || Meteor;
   _onReady = options['onReady'] || null;
@@ -63,6 +63,9 @@ InfiniLoad = function (collection, options) {
   _serverParameters = options['serverParameters'] || {};
   _initialLimit = options['initialLimit'] || 10;
   _limitIncrement = options['limitIncrement'] || _initialLimit;
+
+  _statsCollName = '__InfiniLoad-Stats-' + collection['_name'] + _pubId;
+  _contentCollName = '__InfiniLoad-Content-' + collection['_name'] + _pubId;
 
   if (_verbose) {
     log('Initializing InfiniLoad for collection', collection['_name']);
@@ -99,19 +102,19 @@ InfiniLoad = function (collection, options) {
     Tracker.nonreactive(_UpdateLoadOptions);
   };
   _UpdateLoadOptions_NonReactive();
-  
+
   // React to: (If used in a computation)
   // - collection
   _GetOldDocCount = function() {
     return collection.find({}).count()
   };
-  
+
   // React to: (If used in a computation)
   // - _totalDocCount
   _GetTotalDocCount = function() {
     return _totalDocCount.get();
   };
-  
+
   // React to: (If used in a computation)
   // - _newDocCount
   _GetNewDocCount = function() {
@@ -156,7 +159,7 @@ InfiniLoad = function (collection, options) {
     _listLoadLimit.set(listLoadLimit);
     _UpdateLoadOptions_NonReactive();
   };
-  
+
   _SetServerParameters = function(value) {
     check(value, Object);
     _serverArgs.set(value);
@@ -263,6 +266,14 @@ InfiniLoad = function (collection, options) {
     'countTotal': _GetTotalDocCount,
     'setServerParameters': _SetServerParameters
   };
+
+  // Attach a reference to the original collection.
+  Object.defineProperty(_API, 'collection', {
+    'configurable': false,
+    'enumerable': false,
+    'value': collection,
+    'writable': false
+  })
 
   // If a template instance is not provided, the `stop` method has to be
   // provided so the user can stop all the subscriptions and computations.

@@ -20,18 +20,17 @@ InfiniLoad = function (collection, options) {
   'use strict';
 
   var _statsCollName, _contentCollName,
-      _selector, _sort, _fields, _timeFieldName,
+      _pubId, _selector, _sort, _fields, _timeFieldName,
       _affiliation,
       _verbose, _slowdown, // These are debug options.
       _countingSort, _countingFields;
 
   // Make sure we get a valid collection.
   check(collection, Mongo.Collection);
-  _statsCollName = '__InfiniLoad-Stats-' + collection['_name'];
-  _contentCollName = '__InfiniLoad-Content-' + collection['_name'];
 
   // Check necessary parameters in options.
   check(options, Match.Optional(Match.ObjectIncluding({
+    'id': Match.Optional(String),
     'selector': Match.Optional(Match.OneOf(Object, Function)),
     'sort': Match.Optional(Match.OneOf(Object, Function)),
     'fields': Match.Optional(Match.OneOf(Object, Function)),
@@ -44,6 +43,7 @@ InfiniLoad = function (collection, options) {
   options = options || {};
 
   // Fetch options.
+  _pubId = options['id'] || '';
   _selector = options['selector'] || {};
   _sort = options['sort'] || {};
   _fields = options['fields'] || {};
@@ -51,6 +51,9 @@ InfiniLoad = function (collection, options) {
   _affiliation = options['affiliation'] || null;
   _verbose = options['verbose'] || false;
   _slowdown = options['slowdown'] || 0;
+
+  _statsCollName = '__InfiniLoad-Stats-' + collection['_name'] + _pubId;
+  _contentCollName = '__InfiniLoad-Content-' + collection['_name'] + _pubId;
 
   // Sort options for counting and detecting new documents.
   _countingSort = {};
