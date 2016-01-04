@@ -26,10 +26,10 @@ InfiniLoad = function (collection, options) {
       _computations, _subscriptions,
       _onStatsSubscribed, _onContentSubscribed,
       _UpdateLoadOptions, _UpdateLoadOptions_NonReactive,
-      _GetOldDocCount,
-      _GetTotalDocCount,
-      _GetNewDocCount, _HasMoreDocs, _LoadMoreDocs,
-      _LoadNewDocs,
+      _GetLoadedDocCount, _GetToLoadDocCount,
+      _GetNewDocCount, _GetTotalDocCount,
+      _HasMoreDocs, _HasNewDocs,
+      _LoadMoreDocs, _LoadNewDocs,
       _SetServerParameters,
       _Stop,
       _API;
@@ -105,14 +105,20 @@ InfiniLoad = function (collection, options) {
 
   // React to: (If used in a computation)
   // - collection
-  _GetOldDocCount = function() {
+  _GetLoadedDocCount = function() {
     return collection.find({}).count()
   };
 
   // React to: (If used in a computation)
   // - _totalDocCount
-  _GetTotalDocCount = function() {
-    return _totalDocCount.get();
+  // - _newDocCount
+  // - _listLoadLimit
+  _GetToLoadDocCount = function() {
+    var listLoadLimit, newDocCount, totalDocCount;
+    totalDocCount = _totalDocCount.get();
+    newDocCount = _newDocCount.get();
+    listLoadLimit = _listLoadLimit.get();
+    return totalDocCount - newDocCount - listLoadLimit;
   };
 
   // React to: (If used in a computation)
@@ -123,14 +129,20 @@ InfiniLoad = function (collection, options) {
 
   // React to: (If used in a computation)
   // - _totalDocCount
-  // - _newDocCount
-  // - _listLoadLimit
+  _GetTotalDocCount = function() {
+    return _totalDocCount.get();
+  };
+
+  // React to: (If used in a computation)
+  // (Refer to _GetToLoadDocCount)
   _HasMoreDocs = function() {
-    var listLoadLimit, newDocCount, totalDocCount;
-    totalDocCount = _totalDocCount.get();
-    newDocCount = _newDocCount.get();
-    listLoadLimit = _listLoadLimit.get();
-    return listLoadLimit < (totalDocCount - newDocCount);
+    return _GetToLoadDocCount() > 0;
+  };
+
+  // React to: (If used in a computation)
+  // (Refer to _GetNewDocCount)
+  _HasNewDocs = function() {
+    return _GetNewDocCount() > 0;
   };
 
   // React to: (If used in a computation)
@@ -258,12 +270,14 @@ InfiniLoad = function (collection, options) {
   _API = {
     'find': collection.find.bind(collection),
     'findOne': collection.findOne.bind(collection),
-    'count': _GetOldDocCount,
+    'count': _GetLoadedDocCount,
+    'countMore': _GetToLoadDocCount,
     'countNew': _GetNewDocCount,
+    'countTotal': _GetTotalDocCount,
     'hasMore': _HasMoreDocs,
+    'hasNew': _HasNewDocs,
     'loadMore': _LoadMoreDocs,
     'loadNew': _LoadNewDocs,
-    'countTotal': _GetTotalDocCount,
     'setServerParameters': _SetServerParameters
   };
 

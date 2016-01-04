@@ -69,13 +69,25 @@ template.onCreated (template) ->
   # Reactive.
   loadedDocumentCount = wrappedCollection.count()
 
+  # Get the number of old documents that have not been loaded.
+  # Reactive.
+  moreToLoadDocumentCount = wrappedCollection.countMore()
+
   # Get the number of new documents that are available to be loaded.
   # Reactive.
   newUnloadedDocumentCount = wrappedCollection.countNew()
 
+  # Get the number of all documents.
+  # Reactive.
+  totalDocumentCount = wrappedCollection.countTotal()
+
   # Check if there are any more old documents to load.
   # Reactive.
   hasOldDocumentToLoad = wrappedCollection.hasMore()
+
+  # Check if there are any more new documents to load.
+  # Reactive.
+  hasNewDocumentToLoad = wrappedCollection.hasNew()
 
   # Load `amount` of old documents. If `amount` is not specified, `limitIncrement` in
   # the collection options would be used.
@@ -83,9 +95,6 @@ template.onCreated (template) ->
 
   # Load all of the new documents.
   wrappedCollection.loadNew()
-
-  # Get the number of all documents.
-  totalDocumentCount = wrappedCollection.countTotal()
 
   # If the `tpl` was not specified in the collection options, `wrappedCollection` would
   # have one more interface:
