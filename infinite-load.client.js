@@ -30,14 +30,14 @@ class InfiniLoadClient {
     // If a template instance is not provided, the `stop` method has to be
     // provided so the user can stop all the subscriptions and computations.
     this.stop = scope.stop.bind(scope);
+    this._started = false;
   }
 }
 
 class InfiniLoadScope {
   constructor(args) {
+    this.id = args.id;
     this.collection = args.collection;
-    this.tracker = args.tracker;
-    this.subscriber = args.subscriber;
     this.statsCollName = args.statsCollName;
     this.contentCollName = args.contentCollName;
     this.statsCollection = new Mongo.Collection(this.statsCollName);
@@ -189,7 +189,7 @@ class InfiniLoadScope {
     if (this.verbose) {
       this.log('Subscribing status', parameters);
     }
-    this.subscriptions['stats'] = this.subscriber.subscribe(this.statsCollName, parameters, onSubscriptionReady);
+    this.subscriptions['stats'] = this.subscribe(this.statsCollName, parameters, onSubscriptionReady);
   }
 
   // When new stats come in, update the records.
@@ -236,18 +236,31 @@ class InfiniLoadScope {
       return;
     }
     //else
-    this.subscriptions['content'] = this.subscriber.subscribe(this.contentCollName, parameters, onSubscriptionReady);
+    this.subscriptions['content'] = this.subscribe(this.contentCollName, parameters, onSubscriptionReady);
   }
 
-  start () {
+  start (tpl) {
+    check(tpl, Match.Optional(Blaze.TemplateInstance));
+    if (this._started) {
+      throw new Error('InfiniLoadClient ' + this.id + ' already started.');
+    }
+    //else
+    this._started = true;
+    if (tpl) {
+      this.autorun = tpl.autorun.bind(tpl);
+      this.subscribe = tpl.subscribe.bind(tpl);
+    } else {
+      this.autorun = Tracker.autorun.bind(Tracker);
+      this.subscribe = Meteor.subscribe.bind(Meteor);
+    }
     if (this.verbose) {
       this.log('Starting...');
     }
     this.updateLoadOptionsNonReactive();
-    this.computations['subscribeStats'] = this.tracker.autorun(this._subscribeStatsAutorun.bind(this));
-    this.computations['saveStats'] = this.tracker.autorun(this._saveStatsAutorun.bind(this));
-    this.computations['setLastLoadTime'] = this.tracker.autorun(this._setLastLoadTimeAutorun.bind(this));
-    this.computations['subscribeContent'] = this.tracker.autorun(this._subscribeContentAutorun.bind(this));
+    this.computations['subscribeStats'] = this.autorun(this._subscribeStatsAutorun.bind(this));
+    this.computations['saveStats'] = this.autorun(this._saveStatsAutorun.bind(this));
+    this.computations['setLastLoadTime'] = this.autorun(this._setLastLoadTimeAutorun.bind(this));
+    this.computations['subscribeContent'] = this.autorun(this._subscribeContentAutorun.bind(this));
   }
 
   stop () {
@@ -264,6 +277,7 @@ class InfiniLoadScope {
     for (let sub of this.subscriptions) {
       sub.stop()
     }
+    this._started = false;
   }
 
   get API () {
@@ -275,7 +289,6 @@ InfiniLoad = function (collection, options) {
   "use strict";
 
   var _pubId,
-      _tracker, _subscriber,
       _onReady, _onUpdate,
       _verbose,
       _serverParameters,
@@ -292,7 +305,6 @@ InfiniLoad = function (collection, options) {
     'serverParameters': Match.Optional(Object),
     'initialLimit': Match.Optional(Number),
     'limitIncrement': Match.Optional(Number),
-    'tpl': Match.Optional(Blaze.TemplateInstance),
     'onReady': Match.Optional(Function),
     'onUpdate': Match.Optional(Function),
     'verbose': Match.Optional(Boolean)
@@ -302,8 +314,6 @@ InfiniLoad = function (collection, options) {
 
   // Fetch options.
   _pubId = options['id'] || 'default';
-  _tracker = options['tpl'] || Tracker;
-  _subscriber = options['tpl'] || Meteor;
   _onReady = options['onReady'] || null;
   _onUpdate = options['onUpdate'] || null;
   _verbose = options['verbose'] || false;
@@ -340,9 +350,8 @@ InfiniLoad = function (collection, options) {
 
   if (!Object.hasOwnProperty.call(_rootScope, _pubId)) {
     _rootScope[_pubId] = new InfiniLoadScope({
+      id: _pubId,
       collection: collection,
-      tracker: _tracker,
-      subscriber: _subscriber,
       statsCollName: _statsCollName,
       contentCollName: _contentCollName,
       serverParameters: _serverParameters,
