@@ -110,12 +110,12 @@ template.onCreated (template) ->
 
 ```CoffeeScript
 # Server Side
-###
-InfiniLoad (Server)
-  @param Mongo.Collection collection The collection of which we are publishing.
-  @param Object options Possible options are explained below.
-###
 Meteor.startup () =>
+  ###
+  InfiniLoad (Server)
+    @param Mongo.Collection collection The collection of which we are publishing.
+    @param Object options Possible options are explained below.
+  ###
   InfiniLoad collection, {
     # A unique identifier for this wrapped collection. Useful when you need to
     #   have two InfiniLoad collections of the same Mongo.Collection.
