@@ -249,6 +249,8 @@ class InfiniLoadScope {
     if (tpl) {
       this.autorun = tpl.autorun.bind(tpl);
       this.subscribe = tpl.subscribe.bind(tpl);
+      console.log(tpl, tpl.view.template);
+      tpl.view.onViewDestroyed(this.stop.bind(this));
     } else {
       this.autorun = Tracker.autorun.bind(Tracker);
       this.subscribe = Meteor.subscribe.bind(Meteor);
@@ -268,15 +270,20 @@ class InfiniLoadScope {
       this.log('Stopping...');
     }
     // Stop all computations.
-    for (let comp of this.computations) {
+    for (let name of Object.getOwnPropertyNames(this.computations)) {
+      let comp = this.computations[name];
       if (!comp.stopped) {
-        comp.stop()
+        comp.stop();
       }
     }
     // Stop all subscriptions.
-    for (let sub of this.subscriptions) {
-      sub.stop()
+    for (let name of Object.getOwnPropertyNames(this.subscriptions)) {
+      let sub = this.subscriptions[name];
+      // It's OK to call `stop` multiple times.
+      sub.stop();
     }
+    delete this.autorun;
+    delete this.subscribe;
     this._started = false;
   }
 
