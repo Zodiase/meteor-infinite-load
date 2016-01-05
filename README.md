@@ -18,7 +18,7 @@ template.onCreated (template) ->
     # A unique identifier for this wrapped collection. Useful when you need to
     #   have two InfiniLoad collections of the same Mongo.Collection.
     # Note that this option has to match on both the client and server side.
-    # Optional.
+    # Optional. Default is 'default'.
     id: String
 
     # Specify the initial parameters sent to the server.
@@ -116,7 +116,7 @@ InfiniLoad collection, {
   # A unique identifier for this wrapped collection. Useful when you need to
   #   have two InfiniLoad collections of the same Mongo.Collection.
   # Note that this option has to match on both the client and server side.
-  # Optional.
+  # Optional. Default is 'default'.
   id: String
 
   # The selector passed to `collection.find` for publishing.

@@ -43,7 +43,7 @@ InfiniLoad = function (collection, options) {
   options = options || {};
 
   // Fetch options.
-  _pubId = options['id'] || '';
+  _pubId = options['id'] || 'default';
   _selector = options['selector'] || {};
   _sort = options['sort'] || {};
   _fields = options['fields'] || {};

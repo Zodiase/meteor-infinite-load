@@ -1,4 +1,4 @@
-var log = function () {
+const log = function () {
   var args = [
     '<InfiniLoad>'
   ];
@@ -8,31 +8,280 @@ var log = function () {
   console.log.apply(console, args);
 };
 
+const attachedScopeName = '_infiniLoad';
+
+class InfiniLoadClient {
+  constructor(scope) {
+    check(scope, InfiniLoadScope);
+    this.originalCollection = scope.collection;
+    this.find = scope.collection.find.bind(scope.collection);
+    this.findOne = scope.collection.findOne.bind(scope.collection);
+    this.count = scope.getLoadedDocCount.bind(scope);
+    this.countMore = scope.getToLoadDocCount.bind(scope);
+    this.countNew = scope.getNewDocCount.bind(scope);
+    this.countTotal = scope.getTotalDocCount.bind(scope);
+    this.hasMore = scope.hasMoreDocs.bind(scope);
+    this.hasNew = scope.hasNewDocs.bind(scope);
+    this.loadMore = scope.loadMoreDocs.bind(scope);
+    this.loadNew = scope.loadNewDocs.bind(scope);
+    this.setServerParameters = scope.setServerParameters.bind(scope);
+    this.getServerParameters = scope.getServerParameters.bind(scope);
+    this.start = scope.start.bind(scope);
+    // If a template instance is not provided, the `stop` method has to be
+    // provided so the user can stop all the subscriptions and computations.
+    this.stop = scope.stop.bind(scope);
+  }
+}
+
+class InfiniLoadScope {
+  constructor(args) {
+    this.collection = args.collection;
+    this.tracker = args.tracker;
+    this.subscriber = args.subscriber;
+    this.statsCollName = args.statsCollName;
+    this.contentCollName = args.contentCollName;
+    this.statsCollection = new Mongo.Collection(this.statsCollName);
+    this.serverArgs = new ReactiveVar(args.serverParameters);
+    this.newDocCount = new ReactiveVar(0);
+    this.totalDocCount = new ReactiveVar(0);
+    this.latestDocTime = new ReactiveVar(0);
+    this.lastLoadTime = new ReactiveVar(0);
+    this.listLoadLimit = new ReactiveVar(args.initialLimit);
+    this.limitIncrement = args.limitIncrement;
+    this.onReady = args.onReady;
+    this.onUpdate = args.onUpdate;
+    this.verbose = args.verbose;
+    this.log = args.log;
+    this.loadOptions = new ReactiveVar(null);
+    this.computations = {};
+    this.subscriptions = {};
+    this.loadedDocPattern = {};
+    this.initialDataReady = false;
+  }
+
+  // React to: (If used in a computation)
+  // - this.collection
+  getLoadedDocCount () {
+    return this.collection.find(this.loadedDocPattern).count()
+  }
+
+  // React to: (If used in a computation)
+  // - this.totalDocCount
+  // - this.newDocCount
+  // - this.listLoadLimit
+  getToLoadDocCount () {
+    let totalDocCount = this.totalDocCount.get(),
+        newDocCount = this.newDocCount.get(),
+        listLoadLimit = this.listLoadLimit.get();
+    return totalDocCount - newDocCount - listLoadLimit;
+  }
+
+  // React to: (If used in a computation)
+  // - this.newDocCount
+  getNewDocCount () {
+    return this.newDocCount.get();
+  }
+
+  // React to: (If used in a computation)
+  // - this.totalDocCount
+  getTotalDocCount () {
+    return this.totalDocCount.get();
+  }
+
+  // React to: (If used in a computation)
+  // (Refer to this.getToLoadDocCount)
+  hasMoreDocs () {
+    return this.getToLoadDocCount() > 0;
+  }
+
+  // React to: (If used in a computation)
+  // (Refer to this.getNewDocCount)
+  hasNewDocs () {
+    return this.getNewDocCount() > 0;
+  }
+
+  // React to: (If used in a computation)
+  // - this.listLoadLimit
+  loadMoreDocs (limitIncrement) {
+    let listLoadLimit = this.listLoadLimit.get();
+    listLoadLimit += limitIncrement || this.limitIncrement;
+    this.listLoadLimit.set(listLoadLimit);
+    this.updateLoadOptionsNonReactive();
+  }
+
+  // React to: (If used in a computation)
+  // - this.latestDocTime
+  // - this.lastLoadTime
+  // - this.listLoadLimit
+  // - this.newDocCount
+  loadNewDocs () {
+    let latestDocTime = this.latestDocTime.get(),
+        lastLoadTime = this.lastLoadTime.get(),
+        listLoadLimit = this.listLoadLimit.get(),
+        newDocCount = this.newDocCount.get();
+    listLoadLimit += newDocCount;
+    this.lastLoadTime.set(latestDocTime);
+    this.listLoadLimit.set(listLoadLimit);
+    this.updateLoadOptionsNonReactive();
+  }
+
+  setServerParameters (value) {
+    check(value, Object);
+    this.serverArgs.set(value);
+    this.updateLoadOptionsNonReactive();
+  }
+  getServerParameters () {
+    return this.serverArgs.get();
+  }
+
+  // React to: (If used in a computation)
+  // - this.serverArgs
+  // - this.listLoadLimit
+  // - this.lastLoadTime
+  updateLoadOptions () {
+    let newLoadOptions = {
+      'args': this.serverArgs.get(),
+      'limit': this.listLoadLimit.get(),
+      'lastLoadTime': this.lastLoadTime.get()
+    };
+    this.loadOptions.set(newLoadOptions);
+    return newLoadOptions;
+  }
+  // Non-reactive version of updateLoadOptions.
+  updateLoadOptionsNonReactive () {
+    return Tracker.nonreactive(this.updateLoadOptions.bind(this));
+  }
+
+  _onStatsSubscribed () {
+    if (this.verbose) {
+      this.log('Stats subscription ready');
+    }
+  }
+
+  _onContentSubscribed () {
+    if (this.verbose) {
+      this.log('Data subscription ready');
+    }
+    if (!this.initialDataReady) {
+      this.initialDataReady = true;
+      if (this.onReady) {
+        this.onReady.call(this.API, this.collection);
+      }
+    } else {
+      if (this.onUpdate) {
+        this.onUpdate.call(this.API, this.collection);
+      }
+    }
+  }
+
+  // Subscribe to the latest stats by last load time.
+  // React to:
+  // - this.serverArgs
+  // - this.lastLoadTime
+  _subscribeStatsAutorun (comp) {
+    let serverArgs = this.serverArgs.get(),
+        lastLoadTime = this.lastLoadTime.get(),
+        parameters = {
+          'args': serverArgs,
+          'lastLoadTime': lastLoadTime
+        }
+        onSubscriptionReady = this._onStatsSubscribed.bind(this);
+    if (this.verbose) {
+      this.log('Subscribing status', parameters);
+    }
+    this.subscriptions['stats'] = this.subscriber.subscribe(this.statsCollName, parameters, onSubscriptionReady);
+  }
+
+  // When new stats come in, update the records.
+  // React to:
+  // - this.statsCollection
+  _saveStatsAutorun (comp) {
+    let stats = this.statsCollection.find(0).fetch()[0];
+    if (!stats) return;
+    //else
+    if (this.verbose) {
+      this.log('Stats updated', stats);
+    }
+    this.newDocCount.set(stats['newDocCount']);
+    this.totalDocCount.set(stats['totalDocCount']);
+    this.latestDocTime.set(stats['latestDocTime']);
+  }
+
+  // When the latest document time comes in (for the first time),
+  // set the last load time to load documents.
+  // React to:
+  // - this.latestDocTime
+  _setLastLoadTimeAutorun (comp) {
+    let latestDocTime = this.latestDocTime.get();
+    if (latestDocTime > 0) {
+      this.lastLoadTime.set(latestDocTime);
+      this.updateLoadOptionsNonReactive();
+      comp.stop();
+    }
+  }
+
+  // Subscribe to the content with those load options.
+  // React to:
+  // - this.loadOptions
+  _subscribeContentAutorun (comp) {
+    let parameters = this.loadOptions.get(),
+        onSubscriptionReady = this._onContentSubscribed.bind(this);
+    if (this.verbose) {
+      this.log('Data subscription parameters', parameters);
+    }
+    if (parameters['lastLoadTime'] === 0) {
+      if (this.verbose) {
+        this.log('Stats not ready yet.');
+      }
+      return;
+    }
+    //else
+    this.subscriptions['content'] = this.subscriber.subscribe(this.contentCollName, parameters, onSubscriptionReady);
+  }
+
+  start () {
+    if (this.verbose) {
+      this.log('Starting...');
+    }
+    this.updateLoadOptionsNonReactive();
+    this.computations['subscribeStats'] = this.tracker.autorun(this._subscribeStatsAutorun.bind(this));
+    this.computations['saveStats'] = this.tracker.autorun(this._saveStatsAutorun.bind(this));
+    this.computations['setLastLoadTime'] = this.tracker.autorun(this._setLastLoadTimeAutorun.bind(this));
+    this.computations['subscribeContent'] = this.tracker.autorun(this._subscribeContentAutorun.bind(this));
+  }
+
+  stop () {
+    if (this.verbose) {
+      this.log('Stopping...');
+    }
+    // Stop all computations.
+    for (let comp of this.computations) {
+      if (!comp.stopped) {
+        comp.stop()
+      }
+    }
+    // Stop all subscriptions.
+    for (let sub of this.subscriptions) {
+      sub.stop()
+    }
+  }
+
+  get API () {
+    return new InfiniLoadClient(this);
+  }
+}
+
 InfiniLoad = function (collection, options) {
   "use strict";
 
-  var _initialDataReady,
-      _pubId,
+  var _pubId,
       _tracker, _subscriber,
       _onReady, _onUpdate,
       _verbose,
       _serverParameters,
       _initialLimit, _limitIncrement,
       _statsCollName, _contentCollName,
-      _Stats,
-      _serverArgs,
-      _newDocCount, _totalDocCount,
-      _latestDocTime, _lastLoadTime, _listLoadLimit, _loadOptions,
-      _computations, _subscriptions,
-      _onStatsSubscribed, _onContentSubscribed,
-      _UpdateLoadOptions, _UpdateLoadOptions_NonReactive,
-      _GetLoadedDocCount, _GetToLoadDocCount,
-      _GetNewDocCount, _GetTotalDocCount,
-      _HasMoreDocs, _HasNewDocs,
-      _LoadMoreDocs, _LoadNewDocs,
-      _SetServerParameters,
-      _Stop,
-      _API;
+      _rootScope, _self;
 
   // Make sure we get a valid collection.
   check(collection, Mongo.Collection);
@@ -51,10 +300,8 @@ InfiniLoad = function (collection, options) {
 
   options = options || {};
 
-  _initialDataReady = false;
-
   // Fetch options.
-  _pubId = options['id'] || '';
+  _pubId = options['id'] || 'default';
   _tracker = options['tpl'] || Tracker;
   _subscriber = options['tpl'] || Meteor;
   _onReady = options['onReady'] || null;
@@ -75,225 +322,40 @@ InfiniLoad = function (collection, options) {
     log('limitIncrement', _limitIncrement);
   }
 
-  _Stats = new Mongo.Collection(_statsCollName)
-
-  _serverArgs = new ReactiveVar(_serverParameters);
-  _newDocCount = new ReactiveVar(0);
-  _totalDocCount = new ReactiveVar(0);
-  _latestDocTime = new ReactiveVar(0);
-  _lastLoadTime = new ReactiveVar(0);
-  _listLoadLimit = new ReactiveVar(_initialLimit);
-  _loadOptions = new ReactiveVar(null);
-
-  _computations = {};
-  _subscriptions = {};
-
-  // React to: (If used in a computation)
-  // - _listLoadLimit
-  // - _lastLoadTime
-  _UpdateLoadOptions = function () {
-    _loadOptions.set({
-      'args': _serverArgs.get(),
-      'limit': _listLoadLimit.get(),
-      'lastLoadTime': _lastLoadTime.get()
+  if (!Object.hasOwnProperty.call(collection, attachedScopeName)) {
+    // Create the new root scope.
+    _rootScope = {};
+    // Attach the scope we need to the original collection.
+    Object.defineProperty(collection, attachedScopeName, {
+      'configurable': false,
+      'enumerable': false,
+      'value': _rootScope,
+      'writable': false
     });
-  };
-  _UpdateLoadOptions_NonReactive = function () {
-    Tracker.nonreactive(_UpdateLoadOptions);
-  };
-  _UpdateLoadOptions_NonReactive();
-
-  // React to: (If used in a computation)
-  // - collection
-  _GetLoadedDocCount = function () {
-    return collection.find({}).count()
-  };
-
-  // React to: (If used in a computation)
-  // - _totalDocCount
-  // - _newDocCount
-  // - _listLoadLimit
-  _GetToLoadDocCount = function () {
-    var listLoadLimit, newDocCount, totalDocCount;
-    totalDocCount = _totalDocCount.get();
-    newDocCount = _newDocCount.get();
-    listLoadLimit = _listLoadLimit.get();
-    return totalDocCount - newDocCount - listLoadLimit;
-  };
-
-  // React to: (If used in a computation)
-  // - _newDocCount
-  _GetNewDocCount = function () {
-    return _newDocCount.get();
-  };
-
-  // React to: (If used in a computation)
-  // - _totalDocCount
-  _GetTotalDocCount = function () {
-    return _totalDocCount.get();
-  };
-
-  // React to: (If used in a computation)
-  // (Refer to _GetToLoadDocCount)
-  _HasMoreDocs = function () {
-    return _GetToLoadDocCount() > 0;
-  };
-
-  // React to: (If used in a computation)
-  // (Refer to _GetNewDocCount)
-  _HasNewDocs = function () {
-    return _GetNewDocCount() > 0;
-  };
-
-  // React to: (If used in a computation)
-  // - _listLoadLimit
-  _LoadMoreDocs = function (limitIncrement) {
-    var listLoadLimit;
-    listLoadLimit = _listLoadLimit.get();
-    listLoadLimit += limitIncrement || _limitIncrement;
-    _listLoadLimit.set(listLoadLimit);
-    _UpdateLoadOptions_NonReactive();
-  };
-
-  // React to: (If used in a computation)
-  // - _latestDocTime
-  // - _lastLoadTime
-  // - _listLoadLimit
-  // - _newDocCount
-  _LoadNewDocs = function () {
-    var lastLoadTime, latestDocTime, listLoadLimit, newDocCount;
-    latestDocTime = _latestDocTime.get();
-    lastLoadTime = _lastLoadTime.get();
-    listLoadLimit = _listLoadLimit.get();
-    newDocCount = _newDocCount.get();
-    listLoadLimit += newDocCount;
-    _lastLoadTime.set(latestDocTime);
-    _listLoadLimit.set(listLoadLimit);
-    _UpdateLoadOptions_NonReactive();
-  };
-
-  _SetServerParameters = function (value) {
-    check(value, Object);
-    _serverArgs.set(value);
-    _UpdateLoadOptions_NonReactive();
-  };
-
-  _onStatsSubscribed = function () {
-    if (_verbose) log('Stats subscription ready');
-  };
-
-  // Subscribe to the latest stats by last load time.
-  // React to:
-  // - _serverArgs
-  // - _lastLoadTime
-  _computations['subscribeStats'] = _tracker.autorun(function (comp) {
-    var serverArgs, lastLoadTime, parameters;
-    serverArgs = _serverArgs.get();
-    lastLoadTime = _lastLoadTime.get();
-    parameters = {
-      'args': serverArgs,
-      'lastLoadTime': lastLoadTime
-    };
-    if (_verbose) log('Subscribing status', parameters);
-    _subscriptions['stats'] = _subscriber.subscribe(_statsCollName, parameters, _onStatsSubscribed);
-  });
-
-  // When new stats come in, update the records.
-  // React to:
-  // - _Stats
-  _computations['saveStats'] = _tracker.autorun(function (comp) {
-    var stats;
-    stats = _Stats.find(0).fetch()[0];
-    if (!stats) return;
-    //else
-    if (_verbose) log('Stats updated', stats);
-    _newDocCount.set(stats['newDocCount']);
-    _totalDocCount.set(stats['totalDocCount']);
-    _latestDocTime.set(stats['latestDocTime']);
-  });
-
-  // When the latest document time comes in (for the first time),
-  // set the last load time to load documents.
-  // React to:
-  // - _latestDocTime
-  _computations['setLastLoadTime'] = _tracker.autorun(function (comp) {
-    var latestDocTime;
-    latestDocTime = _latestDocTime.get();
-    if (latestDocTime > 0) {
-      _lastLoadTime.set(latestDocTime);
-      _UpdateLoadOptions_NonReactive();
-      comp.stop();
-    }
-  });
-
-  _onContentSubscribed = function () {
-    if (_verbose) {
-      log('Data subscription ready');
-    }
-    if (!_initialDataReady) {
-      _initialDataReady = true;
-      if (_onReady) {
-        _onReady.call(_API, collection);
-      }
-    } else {
-      if (_onUpdate) {
-        _onUpdate.call(_API, collection);
-      }
-    }
-  };
-
-  // Subscribe to the content with those load options.
-  // React to:
-  // - _loadOptions
-  _computations['subscribeContent'] = _tracker.autorun(function (comp) {
-    var parameters;
-    parameters = _loadOptions.get();
-    if (_verbose) log('Data subscription parameters', parameters);
-    if (parameters['lastLoadTime'] === 0) return;
-    //else
-    _subscriptions['content'] = _subscriber.subscribe(_contentCollName, parameters, _onContentSubscribed);
-  });
-
-  _Stop = function () {
-    // Stop all computations.
-    for (let comp of _computations) {
-      if (!comp.stopped) {
-        comp.stop()
-      }
-    }
-    // Stop all subscriptions.
-    for (let sub of _subscriptions) {
-      sub.stop()
-    }
-  };
-
-  _API = {
-    'find': collection.find.bind(collection),
-    'findOne': collection.findOne.bind(collection),
-    'count': _GetLoadedDocCount,
-    'countMore': _GetToLoadDocCount,
-    'countNew': _GetNewDocCount,
-    'countTotal': _GetTotalDocCount,
-    'hasMore': _HasMoreDocs,
-    'hasNew': _HasNewDocs,
-    'loadMore': _LoadMoreDocs,
-    'loadNew': _LoadNewDocs,
-    'setServerParameters': _SetServerParameters
-  };
-
-  // Attach a reference to the original collection.
-  Object.defineProperty(_API, 'collection', {
-    'configurable': false,
-    'enumerable': false,
-    'value': collection,
-    'writable': false
-  })
-
-  // If a template instance is not provided, the `stop` method has to be
-  // provided so the user can stop all the subscriptions and computations.
-  if (!options['tpl']) {
-    _API['stop'] = _Stop
+  } else {
+    // Reuse the root scope.
+    _rootScope = collection[attachedScopeName];
+    check(_rootScope, Object);
   }
 
-  return _API;
+  if (!Object.hasOwnProperty.call(_rootScope, _pubId)) {
+    _rootScope[_pubId] = new InfiniLoadScope({
+      collection: collection,
+      tracker: _tracker,
+      subscriber: _subscriber,
+      statsCollName: _statsCollName,
+      contentCollName: _contentCollName,
+      serverParameters: _serverParameters,
+      initialLimit: _initialLimit,
+      limitIncrement: _limitIncrement,
+      onReady: _onReady,
+      onUpdate: _onUpdate,
+      verbose: _verbose,
+      log: log
+    });
+  }
+  _self = _rootScope[_pubId];
+  check(_self, InfiniLoadScope);
+
+  return _self.API;
 };
