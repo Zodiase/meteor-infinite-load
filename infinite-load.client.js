@@ -276,6 +276,7 @@ class InfiniLoadScope {
     }
     delete this.autorun;
     delete this.subscribe;
+    this.initialDataReady = false;
     this._started = false;
   }
 
