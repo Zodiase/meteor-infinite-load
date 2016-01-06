@@ -13,6 +13,7 @@ const attachedScopeName = '_infiniLoad';
 class InfiniLoadClient {
   constructor(scope) {
     check(scope, InfiniLoadScope);
+    this._id = scope.id;
     this.originalCollection = scope.collection;
     this.find = scope.collection.find.bind(scope.collection);
     this.findOne = scope.collection.findOne.bind(scope.collection);
@@ -31,6 +32,10 @@ class InfiniLoadClient {
     // provided so the user can stop all the subscriptions and computations.
     this.stop = scope.stop.bind(scope);
     this._started = false;
+  }
+
+  get id() {
+    return this._id;
   }
 }
 
@@ -147,13 +152,13 @@ class InfiniLoadScope {
 
   _onStatsSubscribed () {
     if (this.verbose) {
-      this.log('Stats subscription ready');
+      this.log(this.id, 'Stats subscription ready');
     }
   }
 
   _onContentSubscribed () {
     if (this.verbose) {
-      this.log('Data subscription ready');
+      this.log(this.id, 'Data subscription ready');
     }
     if (!this.initialDataReady) {
       this.initialDataReady = true;
@@ -180,7 +185,7 @@ class InfiniLoadScope {
         }
         onSubscriptionReady = this._onStatsSubscribed.bind(this);
     if (this.verbose) {
-      this.log('Subscribing status', parameters);
+      this.log(this.id, 'Subscribing status', parameters);
     }
     this.subscriptions['stats'] = this.subscribe(this.statsCollName, parameters, onSubscriptionReady);
   }
@@ -193,7 +198,7 @@ class InfiniLoadScope {
     if (!stats) return;
     //else
     if (this.verbose) {
-      this.log('Stats updated', stats);
+      this.log(this.id, 'Stats updated', stats);
     }
     this.newDocCount.set(stats['newDocCount']);
     this.totalDocCount.set(stats['totalDocCount']);
@@ -220,11 +225,11 @@ class InfiniLoadScope {
     let parameters = this.loadOptions.get(),
         onSubscriptionReady = this._onContentSubscribed.bind(this);
     if (this.verbose) {
-      this.log('Data subscription parameters', parameters);
+      this.log(this.id, 'Data subscription parameters', parameters);
     }
     if (parameters['lastLoadTime'] === 0) {
       if (this.verbose) {
-        this.log('Stats not ready yet.');
+        this.log(this.id, 'Stats not ready yet.');
       }
       return;
     }
@@ -248,7 +253,7 @@ class InfiniLoadScope {
       this.subscribe = Meteor.subscribe.bind(Meteor);
     }
     if (this.verbose) {
-      this.log('Starting...');
+      this.log(this.id, 'Starting...');
     }
     this.updateLoadOptionsNonReactive();
     this.computations['subscribeStats'] = this.autorun(this._subscribeStatsAutorun.bind(this));
@@ -259,7 +264,7 @@ class InfiniLoadScope {
 
   stop () {
     if (this.verbose) {
-      this.log('Stopping...');
+      this.log(this.id, 'Stopping...');
     }
     // Stop all computations.
     for (let name of Object.getOwnPropertyNames(this.computations)) {
@@ -288,7 +293,7 @@ class InfiniLoadScope {
 InfiniLoad = function (collection, options) {
   "use strict";
 
-  var _pubId,
+  var _id, _pubId,
       _onReady, _onUpdate,
       _verbose,
       _serverParameters,
@@ -321,15 +326,17 @@ InfiniLoad = function (collection, options) {
   _initialLimit = options['initialLimit'] || 10;
   _limitIncrement = options['limitIncrement'] || _initialLimit;
 
-  _statsCollName = '__InfiniLoad-Stats-' + collection['_name'] + _pubId;
-  _contentCollName = '__InfiniLoad-Content-' + collection['_name'] + _pubId;
+  _id = collection['_name'] + '__' + _pubId;
+  _statsCollName = '__InfiniLoad-Stats-' + _id;
+  _contentCollName = '__InfiniLoad-Content-' + _id;
 
   if (_verbose) {
-    log('Initializing InfiniLoad for collection', collection['_name']);
-    log('statsCollName', _statsCollName);
-    log('contentCollName', _contentCollName);
-    log('initialLimit', _initialLimit);
-    log('limitIncrement', _limitIncrement);
+    log('Initializing InfiniLoad ' + _id, {
+      'statsCollName': _statsCollName,
+      'contentCollName': _contentCollName,
+      'initialLimit': _initialLimit,
+      'limitIncrement': _limitIncrement
+    });
   }
 
   if (!Object.hasOwnProperty.call(collection, attachedScopeName)) {
@@ -350,7 +357,7 @@ InfiniLoad = function (collection, options) {
 
   if (!Object.hasOwnProperty.call(_rootScope, _pubId)) {
     _rootScope[_pubId] = new InfiniLoadScope({
-      id: _pubId,
+      id: _id,
       collection: collection,
       statsCollName: _statsCollName,
       contentCollName: _contentCollName,

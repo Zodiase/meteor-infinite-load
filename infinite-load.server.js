@@ -20,7 +20,7 @@ InfiniLoad = function (collection, options) {
   'use strict';
 
   var _statsCollName, _contentCollName,
-      _pubId, _selector, _sort, _fields, _timeFieldName,
+      _id, _pubId, _selector, _sort, _fields, _timeFieldName,
       _affiliation,
       _verbose, _slowdown, // These are debug options.
       _countingSort, _countingFields;
@@ -52,8 +52,9 @@ InfiniLoad = function (collection, options) {
   _verbose = options['verbose'] || false;
   _slowdown = options['slowdown'] || 0;
 
-  _statsCollName = '__InfiniLoad-Stats-' + collection['_name'] + _pubId;
-  _contentCollName = '__InfiniLoad-Content-' + collection['_name'] + _pubId;
+  _id = collection['_name'] + '__' + _pubId;
+  _statsCollName = '__InfiniLoad-Stats-' + _id;
+  _contentCollName = '__InfiniLoad-Content-' + _id;
 
   // Sort options for counting and detecting new documents.
   _countingSort = {};
@@ -63,16 +64,17 @@ InfiniLoad = function (collection, options) {
   _countingFields[_timeFieldName] = 1;
 
   if (_verbose) {
-    log('Initializing InfiniLoad for collection', collection._name);
-    log('_statsCollName', _statsCollName);
-    log('_contentCollName', _contentCollName);
-    log('selector', _selector);
-    log('sort', _sort);
-    log('fields', _fields);
-    log('timeFieldName', _timeFieldName);
-    log('affiliation', _affiliation);
-    log('countingSort', _countingSort);
-    log('countingFields', _countingFields);
+    log('Initializing InfiniLoad ' + _id, {
+      'statsCollName': _statsCollName,
+      'contentCollName': _contentCollName,
+      'selector': _selector,
+      'sort': _sort,
+      'fields': _fields,
+      'timeFieldName': _timeFieldName,
+      'affiliation': _affiliation,
+      'countingSort': _countingSort,
+      'countingFields': _countingFields
+    });
   }
 
   Meteor.publish(_statsCollName, function (options) {
@@ -84,7 +86,7 @@ InfiniLoad = function (collection, options) {
         GetReturnObject, Changed;
 
     if (_verbose) {
-      log('Publish request', _statsCollName, options);
+      log(_id, 'Publish request', _statsCollName, options);
     }
 
     check(options, Match.Optional(Match.ObjectIncluding({
@@ -102,7 +104,7 @@ InfiniLoad = function (collection, options) {
     options['lastLoadTime'] = options['lastLoadTime'] || now;
 
     if (_verbose) {
-      log('Accepted publish request', options);
+      log(_id, 'Accepted publish request', options);
     }
 
     self = this;
@@ -110,7 +112,7 @@ InfiniLoad = function (collection, options) {
 
     selector = resolveGenerator(_selector, [this.userId, options['args']]);
     if (_verbose) {
-      log('selector', selector);
+      log(_id, 'selector', selector);
     }
 
     totalDocCount = 0;
@@ -127,7 +129,7 @@ InfiniLoad = function (collection, options) {
     });
     if (latestDocCursor.count() === 0) {
       if (_verbose) {
-        log('no result');
+        log(_id, 'no result');
       }
       latestDocTime = now;
     } else {
@@ -201,7 +203,7 @@ InfiniLoad = function (collection, options) {
         returningCursors;
 
     if (_verbose) {
-      log('Publish request', _contentCollName, options);
+      log(_id, 'Publish request', _contentCollName, options);
     }
 
     check(options, Match.Optional(Match.ObjectIncluding({
@@ -220,23 +222,23 @@ InfiniLoad = function (collection, options) {
     options['lastLoadTime'] = options['lastLoadTime'] || now;
 
     if (_verbose) {
-      log('Accepted publish request', options);
+      log(_id, 'Accepted publish request', options);
     }
 
     selector = resolveGenerator(_selector, [this.userId, options['args']]);
     if (_verbose) {
-      log('selector', selector);
+      log(_id, 'selector', selector);
     }
 
     sort = resolveGenerator(_sort, [this.userId, options['args']]);
     sort[_timeFieldName] = -1;
     if (_verbose) {
-      log('sort', sort);
+      log(_id, 'sort', sort);
     }
 
     fields = resolveGenerator(_fields, [this.userId, options['args']]);
     if (_verbose) {
-      log('fields', fields);
+      log(_id, 'fields', fields);
     }
 
     oldDocSelector = {};
@@ -256,7 +258,7 @@ InfiniLoad = function (collection, options) {
     });
 
     if (_verbose) {
-      log('Results found', oldDocCursor.count());
+      log(_id, 'Results found', oldDocCursor.count());
     }
 
     returningCursors = [oldDocCursor];
