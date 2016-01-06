@@ -1,0 +1,75 @@
+<head>
+  <title>InfiniLoad Demo - Newsfeed</title>
+</head>
+
+<body></body>
+
+<template name="layout">
+  <div class="layout_wrapper">
+    <!-- Simple header with fixed tabs. -->
+    <div class="mdl-layout mdl-js-layout mdl-layout--fixed-header
+                mdl-layout--fixed-tabs">
+      <header class="mdl-layout__header">
+        <div class="mdl-layout__header-row">
+          <!-- Title -->
+          <span class="mdl-layout-title">InfiniLoad Demo - Newsfeed</span>
+        </div>
+        <!-- Tabs -->
+        <div class="mdl-layout__tab-bar mdl-js-ripple-effect">
+          <a href="#hiddentab1" class="trigger-go2newsfeed mdl-layout__tab {{#if showNewsfeed}}is-active{{/if}}">Newsfeed</a>
+          <a href="#hiddentab2" class="trigger-go2about mdl-layout__tab {{#if showAbout}}is-active{{/if}}">About</a>
+        </div>
+      </header>
+      <div class="mdl-layout__drawer">
+        <span class="mdl-layout-title">Title</span>
+      </div>
+      <main class="mdl-layout__content">
+        <section class="mdl-layout__tab-panel hiddentab" id="hiddentab1"></section>
+        <section class="mdl-layout__tab-panel hiddentab" id="hiddentab2"></section>
+        {{> yield}}
+      </main>
+    </div>
+  </div>
+</template>
+
+<template name="newsfeed">
+  <div class="newsfeed-list">
+    <div class="list__header">
+      <!-- Accent-colored flat button -->
+      <button class="trigger-loadNew mdl-button mdl-js-button mdl-button--accent" disabled="{{#unless hasNew}}disabled{{/unless}}">
+        Load New Items
+      </button>
+    </div>
+    {{#each items}}
+    <div class="list__item mdl-card mdl-shadow--2dp">
+      <div class="mdl-card__title mdl-card--expand">
+        <p>{{content}}</p>
+      </div>
+      <div class="mdl-card__actions mdl-card--border">
+        <label>{{createTime}}</label>
+        <div class="mdl-layout-spacer"></div>
+        <button class="trigger-delete-item mdl-button mdl-js-button mdl-button--icon" data-id="{{_id}}">
+          <i class="material-icons">delete</i>
+        </button>
+      </div>
+    </div>
+    {{/each}}
+    <div class="list__footer">
+      <!-- Accent-colored flat button -->
+      <button class="trigger-loadMore mdl-button mdl-js-button mdl-button--accent" disabled="{{#unless hasMore}}disabled{{/unless}}">
+        {{#if hasMore}}Load More Items{{else}}No More Items{{/if}}
+      </button>
+    </div>
+    <form id="form-list__add" class="list__add mdl-shadow--4dp">
+      <div class="textfield-add-message mdl-textfield mdl-js-textfield">
+        <input class="mdl-textfield__input" type="text" id="input-add-message">
+        <label class="mdl-textfield__label" for="input-add-message">Message...</label>
+      </div>
+      <button class="trigger-post mdl-button mdl-js-button mdl-button--primary" type="submit">Post</button>
+    </form>
+  </div>
+</template>
+
+<template name="about">
+  <p>This demo shows how to use the <i>Infinite Load</i> package.</p>
+</template>
