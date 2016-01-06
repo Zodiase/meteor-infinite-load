@@ -15,12 +15,21 @@ var resolveGenerator = function (mixed, args) {
   // its result. Otherwise return that variable.
   return (typeof mixed === 'function') ? mixed.apply(null, args) : mixed;
 };
+var timeValueConversion = {};
+timeValueConversion['number'] = function (numValue) {
+  return numValue;
+};
+timeValueConversion['date'] = function (numValue) {
+  return new Date(numValue);
+};
+var allowedTimeFieldType = Object.getOwnPropertyNames(timeValueConversion);
 
 InfiniLoad = function (collection, options) {
   'use strict';
 
   var _statsCollName, _contentCollName,
-      _id, _pubId, _selector, _sort, _fields, _timeFieldName,
+      _id, _pubId, _selector, _sort, _fields,
+      _timeFieldName, _timeFieldType,
       _affiliation,
       _verbose, _slowdown, // These are debug options.
       _countingSort, _countingFields;
@@ -34,7 +43,10 @@ InfiniLoad = function (collection, options) {
     'selector': Match.Optional(Match.OneOf(Object, Function)),
     'sort': Match.Optional(Match.OneOf(Object, Function)),
     'fields': Match.Optional(Match.OneOf(Object, Function)),
-    'timeFieldName': Match.Optional(String),
+    'timeField': Match.Optional(Match.OneOf(String, {
+      'name': Match.Optional(String),
+      'type': Match.Optional(String)
+    })),
     'affiliation': Match.Optional(Function),
     'verbose': Match.Optional(Boolean),
     'slowdown': Match.Optional(Number)
@@ -47,7 +59,15 @@ InfiniLoad = function (collection, options) {
   _selector = options['selector'] || {};
   _sort = options['sort'] || {};
   _fields = options['fields'] || {};
-  _timeFieldName = options['timeFieldName'] || 'createTime';
+  if (typeof options['timeField'] === 'string') {
+    options['timeField'] = {
+      'name': options['timeField']
+    }
+  } else {
+    options['timeField'] = options['timeField'] || {};
+  }
+  _timeFieldName = options['timeField']['name'] || 'createTime';
+  _timeFieldType = options['timeField']['type'] || 'number';
   _affiliation = options['affiliation'] || null;
   _verbose = options['verbose'] || false;
   _slowdown = options['slowdown'] || 0;
@@ -63,6 +83,12 @@ InfiniLoad = function (collection, options) {
   _countingFields = {};
   _countingFields[_timeFieldName] = 1;
 
+  // Verify configurations.
+  if (allowedTimeFieldType.indexOf(_timeFieldType) < 0) {
+    throw new Error('Error when initializing InfiniLoad ' + _id + '. ' +
+      _timeFieldType + ' is not a supported type.');
+  }
+
   if (_verbose) {
     log('Initializing InfiniLoad ' + _id, {
       'statsCollName': _statsCollName,
@@ -71,6 +97,7 @@ InfiniLoad = function (collection, options) {
       'sort': _sort,
       'fields': _fields,
       'timeFieldName': _timeFieldName,
+      'timeFieldConstructor': _timeFieldType,
       'affiliation': _affiliation,
       'countingSort': _countingSort,
       'countingFields': _countingFields
@@ -81,6 +108,7 @@ InfiniLoad = function (collection, options) {
     var now, self, initializing, selector,
         totalDocCount, totalDocCursor, totalDocHandle,
         latestDocTime, latestDocCursor,
+        lastLoadTimeComparingValue,
         newDocCount, newDocCursor, newDocHandle,
         newDocSelector,
         GetReturnObject, Changed;
@@ -121,6 +149,7 @@ InfiniLoad = function (collection, options) {
       'fields': _countingFields
     });
 
+    // Get the newest document.
     latestDocTime = 0;
     latestDocCursor = collection.find(selector, {
       'sort': _countingSort,
@@ -129,17 +158,21 @@ InfiniLoad = function (collection, options) {
     });
     if (latestDocCursor.count() === 0) {
       if (_verbose) {
-        log(_id, 'no result');
+        log(_id, 'selection is empty');
       }
       latestDocTime = now;
     } else {
-      latestDocTime = Number(latestDocCursor.fetch()[0][_timeFieldName]) || now;
+      // Time field value must be able to be converted to a number.
+      let timeValue = Number(latestDocCursor.fetch()[0][_timeFieldName]);
+      latestDocTime = timeValue || now;
     }
 
+    // Get what's new since last loading.
+    lastLoadTimeComparingValue = timeValueConversion[_timeFieldType](options['lastLoadTime'])
     newDocCount = 0;
     newDocSelector = {};
     newDocSelector[_timeFieldName] = {
-      '$gt': options['lastLoadTime']
+      '$gt': lastLoadTimeComparingValue
     };
     newDocCursor = collection.find({
       '$and': [
@@ -165,8 +198,10 @@ InfiniLoad = function (collection, options) {
     totalDocHandle = totalDocCursor.observeChanges({
       'added': function (id, fields) {
         totalDocCount++;
-        if (fields[_timeFieldName] > latestDocTime) {
-          latestDocTime = fields[_timeFieldName];
+        // Time field value must be able to be converted to a number.
+        let timeValue = Number(fields[_timeFieldName]);
+        if (timeValue > latestDocTime) {
+          latestDocTime = timeValue;
         }
         if (!initializing) Changed();
       },
@@ -200,7 +235,7 @@ InfiniLoad = function (collection, options) {
 
   Meteor.publish(_contentCollName, function (options) {
     var now, selector, sort, fields, oldDocSelector, oldDocCursor,
-        returningCursors;
+        lastLoadTimeComparingValue, returningCursors;
 
     if (_verbose) {
       log(_id, 'Publish request', _contentCollName, options);
@@ -241,9 +276,10 @@ InfiniLoad = function (collection, options) {
       log(_id, 'fields', fields);
     }
 
+    lastLoadTimeComparingValue = timeValueConversion[_timeFieldType](options['lastLoadTime'])
     oldDocSelector = {};
     oldDocSelector[_timeFieldName] = {
-      '$lte': options['lastLoadTime']
+      '$lte': lastLoadTimeComparingValue
     };
 
     oldDocCursor = collection.find({

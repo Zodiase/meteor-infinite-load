@@ -126,14 +126,14 @@ Meteor.startup () =>
     # Note that this option has to match on both the client and server side.
     # Optional. Default is 'default'.
     id: String
-  
+
     # The selector passed to `collection.find` for publishing.
     # If a function is provided instead of an object, the function will be
     #   called with the user ID as the first argument and the parameters passed
     #   from client as the second argument to generate the selector object.
     # Optional. If omitted, the empty selector will be used.
     selector: Object|Function
-  
+
     # Sort options passed to `collection.find` for publishing.
     # If a function is provided instead of an object, the function will be
     #   called with the user ID as the first argument and the parameters passed
@@ -142,18 +142,27 @@ Meteor.startup () =>
     # Optional. If omitted, no extra sorting will be done other than the basic
     #   temporal sort.
     sort: Object|Function
-  
+
     # Field options passed to `collection.find` for publishing.
     # If a function is provided instead of an object, the function will be
     #   called with the user ID as the first argument and the parameters passed
     #   from client as the second argument to generate the fields object.
     # Optional. If omitted, all fields will be returned.
     fields: Object|Function
-  
-    # Name of the field used for temporal sorting.
-    # Optional. Default is 'createTime'.
-    timeFieldName: String
-  
+
+    # Configuration for temporal sorting.
+    timeField: {
+      # Name of the field used for temporal sorting.
+      # Optional. Default is 'createTime'.
+      name: String
+      # Type of the value stored.
+      # The only supported values are 'number' and 'date'.
+      # Optional. Default is 'number'.
+      type: String
+    }
+    # Shorthand for specifying only the `timeField.name`.
+    timeField: String
+
     # Function for affiliating extra data from other collections to this
     #   subscription. The function will be called with the data cursor to be
     #   published as the first argument and is expected to return another cursor
@@ -162,16 +171,16 @@ Meteor.startup () =>
     # Note that as a limitation still present as of Meteor 1.2, it is not
     #   allowed to return multiple cursors of the same collection.
     affiliation: Function
-  
+
     # Set to true to show detailed logs.
     # Optional. Default is false.
     verbose: Boolean
-  
+
     # Simulate slow connection by sleeping the specified amount of time before
     #   returning.
     # Optional. Default is 0 and thus does not sleep.
     slowdown: Number
   }
-  
+
   return
 ```
