@@ -188,7 +188,8 @@ InfiniLoad = function (collection, options) {
       return {
         'totalDocCount': totalDocCount,
         'latestDocTime': latestDocTime,
-        'newDocCount': newDocCount
+        'newDocCount': newDocCount,
+        'selector': selector
       };
     };
     Changed = function () {

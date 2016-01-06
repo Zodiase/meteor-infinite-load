@@ -60,14 +60,15 @@ class InfiniLoadScope {
     this.loadOptions = new ReactiveVar(null);
     this.computations = {};
     this.subscriptions = {};
-    this.loadedDocPattern = {};
+    this.loadedDocPattern = new ReactiveVar({});
     this.initialDataReady = false;
   }
 
   // React to: (If used in a computation)
+  // - this.loadedDocPattern
   // - this.collection
   getLoadedDocCount () {
-    return this.collection.find(this.loadedDocPattern).count()
+    return this.collection.find(this.loadedDocPattern.get()).count()
   }
 
   // React to: (If used in a computation)
@@ -203,6 +204,7 @@ class InfiniLoadScope {
     this.newDocCount.set(stats['newDocCount']);
     this.totalDocCount.set(stats['totalDocCount']);
     this.latestDocTime.set(stats['latestDocTime']);
+    this.loadedDocPattern.set(stats['selector']);
   }
 
   // When the latest document time comes in (for the first time),
