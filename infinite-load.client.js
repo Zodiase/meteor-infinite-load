@@ -100,25 +100,18 @@ class InfiniLoadScope {
     return this.getNewDocCount() > 0;
   }
 
-  // React to: (If used in a computation)
-  // - this.listLoadLimit
   loadMoreDocs (limitIncrement) {
-    let listLoadLimit = this.listLoadLimit.get();
+    let listLoadLimit = Tracker.nonreactive(this.listLoadLimit.get.bind(this.listLoadLimit));
     listLoadLimit += limitIncrement || this.limitIncrement;
     this.listLoadLimit.set(listLoadLimit);
     this.updateLoadOptionsNonReactive();
   }
 
-  // React to: (If used in a computation)
-  // - this.latestDocTime
-  // - this.lastLoadTime
-  // - this.listLoadLimit
-  // - this.newDocCount
   loadNewDocs () {
-    let latestDocTime = this.latestDocTime.get(),
-        lastLoadTime = this.lastLoadTime.get(),
-        listLoadLimit = this.listLoadLimit.get(),
-        newDocCount = this.newDocCount.get();
+    let latestDocTime = Tracker.nonreactive(this.latestDocTime.get.bind(this.latestDocTime)),
+        lastLoadTime = Tracker.nonreactive(this.lastLoadTime.get.bind(this.lastLoadTime)),
+        listLoadLimit = Tracker.nonreactive(this.listLoadLimit.get.bind(this.listLoadLimit)),
+        newDocCount = Tracker.nonreactive(this.newDocCount.get.bind(this.newDocCount));
     listLoadLimit += newDocCount;
     this.lastLoadTime.set(latestDocTime);
     this.listLoadLimit.set(listLoadLimit);
@@ -249,7 +242,6 @@ class InfiniLoadScope {
     if (tpl) {
       this.autorun = tpl.autorun.bind(tpl);
       this.subscribe = tpl.subscribe.bind(tpl);
-      console.log(tpl, tpl.view.template);
       tpl.view.onViewDestroyed(this.stop.bind(this));
     } else {
       this.autorun = Tracker.autorun.bind(Tracker);
