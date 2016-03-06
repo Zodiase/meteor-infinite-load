@@ -288,7 +288,10 @@ class InfiniLoadScope {
   }
 
   get API () {
-    return new InfiniLoadClient(this);
+    if (!(this._api instanceof InfiniLoadClient)) {
+      this._api = new InfiniLoadClient(this);
+    }
+    return this._api;
   }
 }
 
