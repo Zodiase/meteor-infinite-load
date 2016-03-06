@@ -265,6 +265,10 @@ class InfiniLoadScope {
   }
 
   stop () {
+    if (!this._started) {
+      return;
+    }
+    //else
     if (this.verbose) {
       this.log(this.id, 'Stopping...');
     }
