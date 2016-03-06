@@ -188,7 +188,7 @@ class InfiniLoadScope {
     if (this.verbose) {
       this.log(this.id, 'Subscribing status', parameters);
     }
-    this.subscriptions['stats'] = this.subscribe(this.statsCollName, parameters, onSubscriptionReady);
+    this.subscriptions['stats'] = this._subscribe(this.statsCollName, parameters, onSubscriptionReady);
   }
 
   // When new stats come in, update the records.
@@ -236,32 +236,32 @@ class InfiniLoadScope {
       return;
     }
     //else
-    this.subscriptions['content'] = this.subscribe(this.contentCollName, parameters, onSubscriptionReady);
+    this.subscriptions['content'] = this._subscribe(this.contentCollName, parameters, onSubscriptionReady);
   }
 
-  start (tpl) {
-    check(tpl, Match.Optional(Blaze.TemplateInstance));
+  start (template) {
+    check(template, Match.Optional(Blaze.TemplateInstance));
     if (this._started) {
       throw new Error('InfiniLoadClient ' + this.id + ' already started.');
     }
     //else
     this._started = true;
-    if (tpl) {
-      this.autorun = tpl.autorun.bind(tpl);
-      this.subscribe = tpl.subscribe.bind(tpl);
-      tpl.view.onViewDestroyed(this.stop.bind(this));
+    if (template) {
+      this._autorun = template.autorun.bind(template);
+      this._subscribe = template.subscribe.bind(template);
+      template.view.onViewDestroyed(this.stop.bind(this));
     } else {
-      this.autorun = Tracker.autorun.bind(Tracker);
-      this.subscribe = Meteor.subscribe.bind(Meteor);
+      this._autorun = Tracker.autorun.bind(Tracker);
+      this._subscribe = Meteor.subscribe.bind(Meteor);
     }
     if (this.verbose) {
       this.log(this.id, 'Starting...');
     }
     this.updateLoadOptionsNonReactive();
-    this.computations['subscribeStats'] = this.autorun(this._subscribeStatsAutorun.bind(this));
-    this.computations['saveStats'] = this.autorun(this._saveStatsAutorun.bind(this));
-    this.computations['setLastLoadTime'] = this.autorun(this._setLastLoadTimeAutorun.bind(this));
-    this.computations['subscribeContent'] = this.autorun(this._subscribeContentAutorun.bind(this));
+    this.computations['subscribeStats'] = this._autorun(this._subscribeStatsAutorun.bind(this));
+    this.computations['saveStats'] = this._autorun(this._saveStatsAutorun.bind(this));
+    this.computations['setLastLoadTime'] = this._autorun(this._setLastLoadTimeAutorun.bind(this));
+    this.computations['subscribeContent'] = this._autorun(this._subscribeContentAutorun.bind(this));
   }
 
   stop () {
@@ -285,8 +285,8 @@ class InfiniLoadScope {
       // It's OK to call `stop` multiple times.
       sub.stop();
     }
-    delete this.autorun;
-    delete this.subscribe;
+    delete this._autorun;
+    delete this._subscribe;
     this.initialDataReady = false;
     this._started = false;
   }
