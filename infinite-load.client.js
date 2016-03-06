@@ -224,8 +224,7 @@ class InfiniLoadScope {
   // React to:
   // - this.loadOptions
   _subscribeContentAutorun (comp) {
-    let parameters = this.loadOptions.get(),
-        onSubscriptionReady = this._onContentSubscribed.bind(this);
+    let parameters = this.loadOptions.get();
     if (this.verbose) {
       this.log(this.id, 'Data subscription parameters', parameters);
     }
@@ -236,6 +235,7 @@ class InfiniLoadScope {
       return;
     }
     //else
+    let onSubscriptionReady = this._onContentSubscribed.bind(this);
     this.subscriptions['content'] = this._subscribe(this.contentCollName, parameters, onSubscriptionReady);
   }
 
