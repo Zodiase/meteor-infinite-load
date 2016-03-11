@@ -8,14 +8,49 @@ const log = function () {
   console.log.apply(console, args);
 };
 
+// The property name used to attach InfiniLoadScope instances to the collection.
 const attachedScopeName = '_infiniLoad';
 
+/**
+ * Interface for operating a `InfiniLoadScope` instance.
+ * @borrows InfiniLoadScope#getLoadedDocCount as #count
+ * @borrows InfiniLoadScope#getToLoadDocCount as #countMore
+ * @borrows InfiniLoadScope#getNewDocCount as #countNew
+ * @borrows InfiniLoadScope#getTotalDocCount as #countTotal
+ * @borrows InfiniLoadScope#hasMoreDocs as #hasMore
+ * @borrows InfiniLoadScope#hasNewDocs as #hasNew
+ * @borrows InfiniLoadScope#loadMoreDocs as #loadMore
+ * @borrows InfiniLoadScope#loadNewDocs as #loadNew
+ * @borrows InfiniLoadScope#setServerParameters as #setServerParameters
+ * @borrows InfiniLoadScope#getServerParameters as #getServerParameters
+ * @borrows InfiniLoadScope#start as #start
+ * @borrows InfiniLoadScope#stop as #stop
+ */
 class InfiniLoadClient {
   constructor(scope) {
     check(scope, InfiniLoadScope);
+    /**
+     * The id of the instance.
+     * @private
+     * @prop {String}
+     */
     this._id = scope.id;
+    /**
+     * The collection wrapped in.
+     * @prop {Mongo.Collection}
+     */
     this.originalCollection = scope.collection;
+    /**
+     * Shortcut to `.find` on the wrapped collection.
+     * @see {@link http://docs.meteor.com/#/full/find}
+     * @method
+     */
     this.find = scope.collection.find.bind(scope.collection);
+    /**
+     * Shortcut to `.findOne` on the wrapped collection.
+     * @see {@link http://docs.meteor.com/#/full/findone}
+     * @method
+     */
     this.findOne = scope.collection.findOne.bind(scope.collection);
     this.count = scope.getLoadedDocCount.bind(scope);
     this.countMore = scope.getToLoadDocCount.bind(scope);
@@ -34,12 +69,36 @@ class InfiniLoadClient {
     this._started = false;
   }
 
+  /**
+   * Returns the id of the instance.
+   * @readonly
+   * @returns {String}
+   */
   get id() {
     return this._id;
   }
 }
 
+/**
+ * Internal class that does all the magic.
+ * @private
+ */
 class InfiniLoadScope {
+  /**
+   * Creates a new InfiniLoadScope instance.
+   * @param {Object} args
+   * @param {String} args.id
+   * @param {Mongo.Collection} args.collection
+   * @param {String} args.statsCollName
+   * @param {String} args.contentCollName
+   * @param {Object} args.serverParameters
+   * @param {Integer} args.initialLimit
+   * @param {Integer} args.limitIncrement
+   * @param {Function} args.onReady
+   * @param {Function} args.onUpdate
+   * @param {Boolean} args.verbose
+   * @param {Function} args.log
+   */
   constructor(args) {
     this.id = args.id;
     this.collection = args.collection;
@@ -64,17 +123,19 @@ class InfiniLoadScope {
     this.initialDataReady = false;
   }
 
-  // React to: (If used in a computation)
-  // - this.loadedDocPattern
-  // - this.collection
+  /**
+   * Get the number of documents loaded.
+   * @returns {Integer}
+   */
   getLoadedDocCount () {
     return this.collection.find(this.loadedDocPattern.get()).count()
   }
 
-  // React to: (If used in a computation)
-  // - this.totalDocCount
-  // - this.newDocCount
-  // - this.listLoadLimit
+  /**
+   * Get the number of documents not yet loaded.
+   * This does not include any new documents.
+   * @returns {Integer}
+   */
   getToLoadDocCount () {
     let totalDocCount = this.totalDocCount.get(),
         newDocCount = this.newDocCount.get(),
@@ -82,30 +143,42 @@ class InfiniLoadScope {
     return totalDocCount - newDocCount - listLoadLimit;
   }
 
-  // React to: (If used in a computation)
-  // - this.newDocCount
+  /**
+   * Get the number of new documents not yet loaded.
+   * @returns {Integer}
+   */
   getNewDocCount () {
     return this.newDocCount.get();
   }
 
-  // React to: (If used in a computation)
-  // - this.totalDocCount
+  /**
+   * Get the number of all documents.
+   * @returns {Integer}
+   */
   getTotalDocCount () {
     return this.totalDocCount.get();
   }
 
-  // React to: (If used in a computation)
-  // (Refer to this.getToLoadDocCount)
+  /**
+   * Checks if there are any old documents to load.
+   * @returns {Boolean}
+   */
   hasMoreDocs () {
     return this.getToLoadDocCount() > 0;
   }
 
-  // React to: (If used in a computation)
-  // (Refer to this.getNewDocCount)
+  /**
+   * Checks if there are any new documents to load.
+   * @returns {Boolean}
+   */
   hasNewDocs () {
     return this.getNewDocCount() > 0;
   }
 
+  /**
+   * Load more old documents from server.
+   * @param {Integer} [limitIncrement] Override the limitIncrement set for the InfiniLoadScope instance.
+   */
   loadMoreDocs (limitIncrement) {
     let listLoadLimit = Tracker.nonreactive(this.listLoadLimit.get.bind(this.listLoadLimit));
     listLoadLimit += limitIncrement || this.limitIncrement;
@@ -113,6 +186,9 @@ class InfiniLoadScope {
     this.updateLoadOptionsNonReactive();
   }
 
+  /**
+   * Load all new documents from server.
+   */
   loadNewDocs () {
     let latestDocTime = Tracker.nonreactive(this.latestDocTime.get.bind(this.latestDocTime)),
         lastLoadTime = Tracker.nonreactive(this.lastLoadTime.get.bind(this.lastLoadTime)),
@@ -124,19 +200,29 @@ class InfiniLoadScope {
     this.updateLoadOptionsNonReactive();
   }
 
+  /**
+   * Set the parameters sent to server.
+   * @param {Object} value
+   */
   setServerParameters (value) {
     check(value, Object);
     this.serverArgs.set(value);
     this.updateLoadOptionsNonReactive();
   }
+
+  /**
+   * Get the parameters sent to server.
+   * @returns {Object}
+   */
   getServerParameters () {
     return this.serverArgs.get();
   }
 
-  // React to: (If used in a computation)
-  // - this.serverArgs
-  // - this.listLoadLimit
-  // - this.lastLoadTime
+  /**
+   * Update the load options object from related reactive sources.
+   * This is done to combine multiple reactive callbacks into one.
+   * @returns {Object}
+   */
   updateLoadOptions () {
     let newLoadOptions = {
       'args': this.serverArgs.get(),
@@ -146,17 +232,31 @@ class InfiniLoadScope {
     this.loadOptions.set(newLoadOptions);
     return newLoadOptions;
   }
-  // Non-reactive version of updateLoadOptions.
+
+  /**
+   * Non-reactive version of updateLoadOptions.
+   * @returns {Object}
+   */
   updateLoadOptionsNonReactive () {
     return Tracker.nonreactive(this.updateLoadOptions.bind(this));
   }
 
+  /**
+   * Callback when stats are pulled from the server.
+   * Not functional at this time.
+   * @private
+   */
   _onStatsSubscribed () {
     if (this.verbose) {
       this.log(this.id, 'Stats subscription ready');
     }
   }
 
+  /**
+   * Callback when content are pulled from the server.
+   * If it's the first time, calls `onReady` callback. Otherwise calls `onUpdate`.
+   * @private
+   */
   _onContentSubscribed () {
     if (this.verbose) {
       this.log(this.id, 'Data subscription ready');
@@ -173,10 +273,11 @@ class InfiniLoadScope {
     }
   }
 
-  // Subscribe to the latest stats by last load time.
-  // React to:
-  // - this.serverArgs
-  // - this.lastLoadTime
+  /**
+   * Autorun for pulling stats from the server.
+   * @param {Tracker.Computation} comp
+   * @private
+   */
   _subscribeStatsAutorun (comp) {
     let serverArgs = this.serverArgs.get(),
         lastLoadTime = this.lastLoadTime.get(),
@@ -188,12 +289,14 @@ class InfiniLoadScope {
     if (this.verbose) {
       this.log(this.id, 'Subscribing status', parameters);
     }
-    this.subscriptions['stats'] = this.subscribe(this.statsCollName, parameters, onSubscriptionReady);
+    this.subscriptions['stats'] = this._subscribe(this.statsCollName, parameters, onSubscriptionReady);
   }
 
-  // When new stats come in, update the records.
-  // React to:
-  // - this.statsCollection
+  /**
+   * Autorun for saving stats from the server into reactive vars.
+   * @param {Tracker.Computation} comp
+   * @private
+   */
   _saveStatsAutorun (comp) {
     let stats = this.statsCollection.find(0).fetch()[0];
     if (!stats) return;
@@ -207,10 +310,11 @@ class InfiniLoadScope {
     this.loadedDocPattern.set(stats['selector']);
   }
 
-  // When the latest document time comes in (for the first time),
-  // set the last load time to load documents.
-  // React to:
-  // - this.latestDocTime
+  /**
+   * When the latest document time comes in (for the first time), set the last load time to load documents.
+   * @param {Tracker.Computation} comp
+   * @private
+   */
   _setLastLoadTimeAutorun (comp) {
     let latestDocTime = this.latestDocTime.get();
     if (latestDocTime > 0) {
@@ -220,12 +324,13 @@ class InfiniLoadScope {
     }
   }
 
-  // Subscribe to the content with those load options.
-  // React to:
-  // - this.loadOptions
+  /**
+   * When the load options are changed, subscribe content with the new options.
+   * @param {Tracker.Computation} comp
+   * @private
+   */
   _subscribeContentAutorun (comp) {
-    let parameters = this.loadOptions.get(),
-        onSubscriptionReady = this._onContentSubscribed.bind(this);
+    let parameters = this.loadOptions.get();
     if (this.verbose) {
       this.log(this.id, 'Data subscription parameters', parameters);
     }
@@ -236,35 +341,47 @@ class InfiniLoadScope {
       return;
     }
     //else
-    this.subscriptions['content'] = this.subscribe(this.contentCollName, parameters, onSubscriptionReady);
+    let onSubscriptionReady = this._onContentSubscribed.bind(this);
+    this.subscriptions['content'] = this._subscribe(this.contentCollName, parameters, onSubscriptionReady);
   }
 
-  start (tpl) {
-    check(tpl, Match.Optional(Blaze.TemplateInstance));
+  /**
+   * Start all the automations. If a template instance is provided, all the automations will be attached to it so they will be terminated automatically.
+   * @param {Blaze.TemplateInstance} [template]
+   */
+  start (template) {
+    check(template, Match.Optional(Blaze.TemplateInstance));
     if (this._started) {
       throw new Error('InfiniLoadClient ' + this.id + ' already started.');
     }
     //else
     this._started = true;
-    if (tpl) {
-      this.autorun = tpl.autorun.bind(tpl);
-      this.subscribe = tpl.subscribe.bind(tpl);
-      tpl.view.onViewDestroyed(this.stop.bind(this));
+    if (template) {
+      this._autorun = template.autorun.bind(template);
+      this._subscribe = template.subscribe.bind(template);
+      template.view.onViewDestroyed(this.stop.bind(this));
     } else {
-      this.autorun = Tracker.autorun.bind(Tracker);
-      this.subscribe = Meteor.subscribe.bind(Meteor);
+      this._autorun = Tracker.autorun.bind(Tracker);
+      this._subscribe = Meteor.subscribe.bind(Meteor);
     }
     if (this.verbose) {
       this.log(this.id, 'Starting...');
     }
     this.updateLoadOptionsNonReactive();
-    this.computations['subscribeStats'] = this.autorun(this._subscribeStatsAutorun.bind(this));
-    this.computations['saveStats'] = this.autorun(this._saveStatsAutorun.bind(this));
-    this.computations['setLastLoadTime'] = this.autorun(this._setLastLoadTimeAutorun.bind(this));
-    this.computations['subscribeContent'] = this.autorun(this._subscribeContentAutorun.bind(this));
+    this.computations['subscribeStats'] = this._autorun(this._subscribeStatsAutorun.bind(this));
+    this.computations['saveStats'] = this._autorun(this._saveStatsAutorun.bind(this));
+    this.computations['setLastLoadTime'] = this._autorun(this._setLastLoadTimeAutorun.bind(this));
+    this.computations['subscribeContent'] = this._autorun(this._subscribeContentAutorun.bind(this));
   }
 
+  /**
+   * Stop all the automations.
+   */
   stop () {
+    if (!this._started) {
+      return;
+    }
+    //else
     if (this.verbose) {
       this.log(this.id, 'Stopping...');
     }
@@ -281,17 +398,40 @@ class InfiniLoadScope {
       // It's OK to call `stop` multiple times.
       sub.stop();
     }
-    delete this.autorun;
-    delete this.subscribe;
+    delete this._autorun;
+    delete this._subscribe;
     this.initialDataReady = false;
     this._started = false;
   }
 
+  /**
+   * Returns an `InfiniLoadClient` instance which is the public APIs for this.
+   * @readonly
+   * @returns {InfiniLoadClient}
+   */
   get API () {
-    return new InfiniLoadClient(this);
+    if (!(this._api instanceof InfiniLoadClient)) {
+      this._api = new InfiniLoadClient(this);
+    }
+    return this._api;
   }
 }
 
+/**
+ * Creates a `InfiniLoadClient` instance for the collection with the given options.
+ * @global
+ * @function
+ * @param {Mongo.Collection} collection
+ * @param {Object} [options={}]
+ * @param {String} [options.id="default"]
+ * @param {Object} [options.serverParameters={}]
+ * @param {Integer} [options.initialLimit=10]
+ * @param {Integer} [options.limitIncrement=10]
+ * @param {Function} [options.onReady=null]
+ * @param {Function} [options.onUpdate=null]
+ * @param {Boolean} [options.verbose=false]
+ * @returns {InfiniLoadClient}
+ */
 InfiniLoad = function (collection, options) {
   "use strict";
 
