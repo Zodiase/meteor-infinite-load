@@ -14,6 +14,7 @@ Package.onUse(function(api) {
   api.versionsFrom('1.2.1');
   api.use([
     'ecmascript',
+    'mongo',
     'check',
     'blaze-html-templates',
     'tracker',
@@ -25,8 +26,12 @@ Package.onUse(function(api) {
 });
 
 Package.onTest(function(api) {
-  api.use('ecmascript');
-  api.use('tinytest');
+  api.use([
+    'ecmascript',
+    'tinytest',
+    'check',
+    'mongo'
+  ]);
   api.use('zodiase:infinite-load');
   api.addFiles('infinite-load-tests.js');
 });
