@@ -266,7 +266,7 @@ class InfiniLoadScope {
     let localStats = Tracker.nonreactive(this.localStats.get.bind(this.localStats)),
         latestDocTime = localStats.latestDocTime || 0,
         newDocCount = localStats.newDocCount || 0;
-    localStats.listLoadLimit += localStats.newDocCount;
+    localStats.listLoadLimit += newDocCount;
     this.lastLoadTime = latestDocTime;
     this.localStats.set(localStats);
     this.updateLoadOptionsNonReactive();
