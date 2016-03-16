@@ -52,6 +52,7 @@ class InfiniLoadClient {
      * @method
      */
     this.findOne = scope.collection.findOne.bind(scope.collection);
+
     this.count = scope.getLoadedDocCount.bind(scope);
     this.countMore = scope.getToLoadDocCount.bind(scope);
     this.countNew = scope.getNewDocCount.bind(scope);
@@ -62,6 +63,10 @@ class InfiniLoadClient {
     this.loadNew = scope.loadNewDocs.bind(scope);
     this.setServerParameters = scope.setServerParameters.bind(scope);
     this.getServerParameters = scope.getServerParameters.bind(scope);
+
+    this.on = scope.on.bind(scope);
+    this.off = scope.off.bind(scope);
+
     this.start = scope.start.bind(scope);
     // If a template instance is not provided, the `stop` method has to be
     // provided so the user can stop all the subscriptions and computations.
@@ -112,8 +117,20 @@ class InfiniLoadScope {
     this.lastLoadTime = new ReactiveVar(0);
     this.listLoadLimit = new ReactiveVar(args.initialLimit);
     this.limitIncrement = args.limitIncrement;
-    this.onReady = args.onReady;
-    this.onUpdate = args.onUpdate;
+    this.eventHandlers = {};
+    this.supportedEvents = [
+      'ready',
+      'update'
+    ];
+    for (let eventName of this.supportedEvents) {
+      this.eventHandlers[eventName] = [];
+    }
+    if (typeof args.onReady === 'function') {
+      this.eventHandlers.ready.push(args.onReady);
+    }
+    if (typeof args.onUpdate === 'function') {
+      this.eventHandlers.update.push(args.onUpdate);
+    }
     this.verbose = args.verbose;
     this.log = args.log;
     this.loadOptions = new ReactiveVar(null);
@@ -121,6 +138,65 @@ class InfiniLoadScope {
     this.subscriptions = {};
     this.loadedDocPattern = new ReactiveVar({});
     this.initialDataReady = false;
+  }
+
+  /**
+   * Attach an event handler function for one or more events.
+   * @param {String} events
+   * @param {Function} handler
+   * @returns {InfiniLoadClient}
+   */
+  on (events, handler) {
+    check(events, String);
+    check(handler, Function);
+
+    let eventsAry = events.split(' ');
+    for (let eventName of eventsAry) {
+      // Skip empty names.
+      if (eventName.length === 0) {
+        continue;
+      }
+      //else
+      // Throw for unsupported events.
+      if (this.supportedEvents.indexOf(eventName) === -1) {
+        throw new RangeError('Unsupported event.');
+      }
+      //else
+      let handlers = this.eventHandlers[eventName];
+      handlers.push(handler);
+    }
+    return this.API;
+  }
+
+  /**
+   * Remove an event handler.
+   * @param {String} events
+   * @param {Function} handler
+   * @returns {InfiniLoadClient}
+   */
+  off (events, handler) {
+    check(events, String);
+    check(handler, Function);
+
+    let eventsAry = events.split(' ');
+    for (let eventName of eventsAry) {
+      // Skip empty names.
+      if (eventName.length === 0) {
+        continue;
+      }
+      //else
+      // Throw for unsupported events.
+      if (this.supportedEvents.indexOf(eventName) === -1) {
+        throw new RangeError('Unsupported event.');
+      }
+      //else
+      let handlers = this.eventHandlers[eventName];
+      let handlerIndex = handlers.indexOf(handler);
+      if (handlerIndex > -1) {
+        handlers.splice(handlerIndex, 1);
+      }
+    }
+    return this.API;
   }
 
   /**
@@ -263,12 +339,12 @@ class InfiniLoadScope {
     }
     if (!this.initialDataReady) {
       this.initialDataReady = true;
-      if (this.onReady) {
-        this.onReady.call(this.API, this.collection);
+      for (let handler of this.eventHandlers.ready) {
+        handler.call(this.API, this.collection);
       }
     } else {
-      if (this.onUpdate) {
-        this.onUpdate.call(this.API, this.collection);
+      for (let handler of this.eventHandlers.update) {
+        handler.call(this.API, this.collection);
       }
     }
   }

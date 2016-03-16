@@ -84,6 +84,8 @@ if (Meteor.isClient) {
       loadNew: Function,
       setServerParameters: Function,
       getServerParameters: Function,
+      on: Function,
+      off: Function,
       start: Function,
       stop: Function
     };
