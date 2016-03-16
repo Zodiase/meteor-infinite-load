@@ -30,6 +30,7 @@ Package.onTest(function(api) {
     'ecmascript',
     'tinytest',
     'underscore',
+    'tracker',
     'check',
     'mongo'
   ]);

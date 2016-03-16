@@ -7,11 +7,9 @@ let testData = {};
 
 if (Meteor.isServer) {
   Meteor.methods({
-    'server_args/verify': function (realData) {
-      return _.isEqual(realData, testData['server_args']);
-    },
-    'data_link/prepare': function (count) {
-      for (let i = 0; i < count; ++i) {
+    'server_args/verify': (realData) => _.isEqual(realData, testData['server_args']),
+    'data_link/insert': (count) => {
+      for (let i = 0; i < Number(count); ++i) {
         dataCollection.insert({
           createTime: Date.now()
         });
@@ -45,6 +43,13 @@ if (Meteor.isServer) {
         testData['server_args'] = args;
         return {};
       }
+    });
+    test.ok();
+  });
+
+  Tinytest.add('Test event registration - preparation', function (test) {
+    InfiniLoad(dataCollection, {
+      id: 'events'
     });
     test.ok();
   });
@@ -160,6 +165,55 @@ if (Meteor.isClient) {
     infini.start();
   });
 
+  Tinytest.addAsync('Test event registration - onReady/offReady', function (test, next) {
+    const infini = InfiniLoad(dataCollection, {
+      id: 'events'
+    });
+    infini.off();
+    const wrongCallback = function (collection) {
+      throw new Error('This callback should not be called.');
+    };
+    infini.on('ready', wrongCallback);
+    infini.off('ready', wrongCallback);
+    const readyCallback = function (collection) {
+      test.ok();
+      this.off('ready', readyCallback);
+      this.stop();
+      next();
+    };
+    infini.on('ready', readyCallback);
+    infini.start();
+  });
+
+  Tinytest.addAsync('Test event registration - onUpdate/offUpdate', function (test, next) {
+    const infini = InfiniLoad(dataCollection, {
+      id: 'events'
+    });
+    infini.off();
+    infini.setServerParameters({});
+    const wrongCallback = function (collection) {
+      throw new Error('This callback should not be called.');
+    };
+    infini.on('update', wrongCallback);
+    infini.off('update', wrongCallback);
+    const readyCallback = function (collection) {
+      this.off('ready', readyCallback);
+      // This would trigger onUpdate.
+      this.setServerParameters({
+        foo: 'bar'
+      });
+    };
+    const updateCallback = function (collection) {
+      test.ok();
+      this.off('update', updateCallback);
+      this.stop();
+      next();
+    };
+    infini.on('ready', readyCallback);
+    infini.on('update', updateCallback);
+    infini.start();
+  });
+
   Tinytest.addAsync('Test data link - preparation', function (test, next) {
     testData.initialLimit = Math.ceil(Math.random() * 30);
     testData.limitIncrement = Math.ceil(Math.random() * 30);
@@ -167,7 +221,15 @@ if (Meteor.isClient) {
     // Make sure to load more at least 10 times.
     testData.expectedTotal = testData.initialLimit + testData.limitIncrement * 10;
 
-    Meteor.call('data_link/prepare', testData.expectedTotal, function (test, next, error, result) {
+    const infini = InfiniLoad(dataCollection, {
+      id: 'data_link',
+      initialLimit: testData.initialLimit,
+      limitIncrement: testData.limitIncrement,
+      verbose: true
+    });
+    testData['data_link'] = infini;
+
+    Meteor.call('data_link/insert', testData.expectedTotal, function (test, next, error, result) {
       if (error) throw error;
 
       test.equal(typeof error, 'undefined');
@@ -184,7 +246,9 @@ if (Meteor.isClient) {
   });
 
   Tinytest.addAsync('Test data link - count old and load more', function (test, next) {
-    const onReadyOrUpdate = function (collection) {
+    const infini = testData['data_link'];
+    infini.off();
+    infini.on('ready update', function (collection) {
       test.equal(this.count(), testData.expectedCount);
       test.equal(this.hasNew(), false);
       test.equal(this.countNew(), 0);
@@ -193,20 +257,70 @@ if (Meteor.isClient) {
       test.equal(this.countMore(), testData.expectedTotal - testData.expectedCount);
       if (testData.expectedTotal - testData.expectedCount > 0) {
         testData.expectedCount = Math.min(testData.expectedCount + testData.limitIncrement, testData.expectedTotal);
+        console.warn('loadMore');
         this.loadMore();
       } else {
+        this.off();
+        this.stop();
         next();
       }
-    };
-    const infini = InfiniLoad(dataCollection, {
-      id: 'data_link',
-      initialLimit: testData.initialLimit,
-      limitIncrement: testData.limitIncrement,
-      onReady: onReadyOrUpdate,
-      onUpdate: onReadyOrUpdate,
-      verbose: true
     });
-    testData['data_link'] = infini;
+    infini.start();
+  });
+
+  Tinytest.addAsync('Test data link - count new and load new', function (test, next) {
+    const infini = testData['data_link'];
+    infini.off();
+    let expectedNew = Math.ceil(Math.random() * 30);
+    console.info('new', expectedNew);
+    let count, total;
+    infini.on('ready', function (collection) {
+      count = this.count();
+      total = this.countTotal() + expectedNew;
+      Meteor.call('data_link/insert', expectedNew, function (test, next, error, result) {
+        if (error) throw error;
+
+        test.equal(typeof error, 'undefined');
+        test.equal(typeof result, 'number');
+
+        test.equal(result, total);
+
+        Tracker.autorun((comp) => {
+          if (this.countNew() === expectedNew) {
+            comp.stop();
+            console.warn('loadNew', {
+              count: this.count(),
+              new: this.countNew()
+            });
+            this.loadNew();
+          }
+        });
+      }.bind(this, test, next));
+      this.off('ready');
+    });
+    infini.on('update', function (collection) {
+      console.info('update', {
+        count: this.count(),
+        new: this.countNew()
+      });
+/*
+      test.equal(this.count(), count);
+      test.equal(this.hasNew(), expectedNew > 0);
+      test.equal(this.countNew(), expectedNew);
+      test.equal(this.countTotal(), total);
+      test.equal(this.hasMore(), total > count);
+      test.equal(this.countMore(), total - expectedNew - count);
+      if (expectedNew > 0) {
+        count += expectedNew;
+        expectedNew = 0;
+        this.loadNew();
+      } else {
+        this.off();
+        this.stop();
+        next();
+      }
+*/
+    });
     infini.start();
   });
 }
