@@ -201,7 +201,7 @@ class InfiniLoadScope {
   }
 
   /**
-   * Set the parameters sent to server.
+   * Set the parameters sent to server. Triggers `onReady` or `onUpdate` when effective.
    * @param {Object} value
    */
   setServerParameters (value) {
