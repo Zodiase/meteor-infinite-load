@@ -111,11 +111,10 @@ class InfiniLoadScope {
     this.contentCollName = args.contentCollName;
     this.statsCollection = new Mongo.Collection(this.statsCollName);
     this.serverArgs = new ReactiveVar(args.serverParameters);
-    this.newDocCount = new ReactiveVar(0);
-    this.totalDocCount = new ReactiveVar(0);
-    this.latestDocTime = new ReactiveVar(0);
-    this.lastLoadTime = new ReactiveVar(0);
-    this.listLoadLimit = new ReactiveVar(args.initialLimit);
+    this.localStats = new ReactiveVar({
+      listLoadLimit: args.initialLimit
+    });
+    this.lastLoadTime = 0;
     this.limitIncrement = args.limitIncrement;
     this.eventHandlers = {};
     this.supportedEvents = [
@@ -137,7 +136,6 @@ class InfiniLoadScope {
     this.contentSubscribeParameters = new ReactiveVar(null);
     this.computations = {};
     this.subscriptions = {};
-    this.loadedDocPattern = new ReactiveVar({});
     this.initialDataReady = false;
   }
 
@@ -199,7 +197,8 @@ class InfiniLoadScope {
    * @returns {Integer}
    */
   getLoadedDocCount () {
-    return this.collection.find(this.loadedDocPattern.get()).count()
+    let localStats = this.localStats.get();
+    return this.collection.find(localStats.selector || {}).count();
   }
 
   /**
@@ -208,9 +207,10 @@ class InfiniLoadScope {
    * @returns {Integer}
    */
   getToLoadDocCount () {
-    let totalDocCount = this.totalDocCount.get(),
-        newDocCount = this.newDocCount.get(),
-        listLoadLimit = this.listLoadLimit.get();
+    let localStats = this.localStats.get(),
+        totalDocCount = localStats.totalDocCount || 0,
+        newDocCount = localStats.newDocCount || 0,
+        listLoadLimit = localStats.listLoadLimit;
     return Math.max(totalDocCount - newDocCount - listLoadLimit, 0);
   }
 
@@ -219,7 +219,8 @@ class InfiniLoadScope {
    * @returns {Integer}
    */
   getNewDocCount () {
-    return this.newDocCount.get();
+    let localStats = this.localStats.get();
+    return localStats.newDocCount || 0;
   }
 
   /**
@@ -227,7 +228,8 @@ class InfiniLoadScope {
    * @returns {Integer}
    */
   getTotalDocCount () {
-    return this.totalDocCount.get();
+    let localStats = this.localStats.get();
+    return localStats.totalDocCount || 0;
   }
 
   /**
@@ -251,9 +253,9 @@ class InfiniLoadScope {
    * @param {Integer} [limitIncrement] Override the limitIncrement set for the InfiniLoadScope instance.
    */
   loadMoreDocs (limitIncrement) {
-    let listLoadLimit = Tracker.nonreactive(this.listLoadLimit.get.bind(this.listLoadLimit));
-    listLoadLimit += limitIncrement || this.limitIncrement;
-    this.listLoadLimit.set(listLoadLimit);
+    let localStats = Tracker.nonreactive(this.localStats.get.bind(this.localStats));
+    localStats.listLoadLimit += limitIncrement || this.limitIncrement;
+    this.localStats.set(localStats);
     this.updateLoadOptionsNonReactive();
   }
 
@@ -261,13 +263,12 @@ class InfiniLoadScope {
    * Load all new documents from server.
    */
   loadNewDocs () {
-    let latestDocTime = Tracker.nonreactive(this.latestDocTime.get.bind(this.latestDocTime)),
-        lastLoadTime = Tracker.nonreactive(this.lastLoadTime.get.bind(this.lastLoadTime)),
-        listLoadLimit = Tracker.nonreactive(this.listLoadLimit.get.bind(this.listLoadLimit)),
-        newDocCount = Tracker.nonreactive(this.newDocCount.get.bind(this.newDocCount));
-    listLoadLimit += newDocCount;
-    this.lastLoadTime.set(latestDocTime);
-    this.listLoadLimit.set(listLoadLimit);
+    let localStats = Tracker.nonreactive(this.localStats.get.bind(this.localStats)),
+        latestDocTime = localStats.latestDocTime || 0,
+        newDocCount = localStats.newDocCount || 0;
+    localStats.listLoadLimit += localStats.newDocCount;
+    this.lastLoadTime = latestDocTime;
+    this.localStats.set(localStats);
     this.updateLoadOptionsNonReactive();
   }
 
@@ -295,14 +296,15 @@ class InfiniLoadScope {
    * @returns {Object}
    */
   updateLoadOptions () {
+    let localStats = this.localStats.get();
     this.statsSubscribeParameters.set({
       'args': this.serverArgs.get(),
-      'lastLoadTime': this.lastLoadTime.get()
+      'lastLoadTime': this.lastLoadTime
     });
     this.contentSubscribeParameters.set({
       'args': this.serverArgs.get(),
-      'limit': this.listLoadLimit.get(),
-      'lastLoadTime': this.lastLoadTime.get()
+      'limit': localStats.listLoadLimit,
+      'lastLoadTime': this.lastLoadTime
     });
   }
 
@@ -321,7 +323,7 @@ class InfiniLoadScope {
    */
   _onStatsSubscribed () {
     if (this.verbose) {
-      this.log(this.id, 'Stats subscription ready');
+      this.log(this.id, 'Stats subscription ready', this.statsCollection.find(0).fetch()[0]);
     }
   }
 
@@ -366,16 +368,17 @@ class InfiniLoadScope {
    * @private
    */
   _saveStatsAutorun (comp) {
-    let stats = this.statsCollection.find(0).fetch()[0];
-    if (!stats) return;
+    let serverStats = this.statsCollection.find(0).fetch()[0];
+    if (!serverStats) return;
     //else
     if (this.verbose) {
-      this.log(this.id, 'Stats updated', stats);
+      this.log(this.id, 'Stats updated', serverStats);
     }
-    this.newDocCount.set(stats['newDocCount']);
-    this.totalDocCount.set(stats['totalDocCount']);
-    this.latestDocTime.set(stats['latestDocTime']);
-    this.loadedDocPattern.set(stats['selector']);
+    let localStats = Tracker.nonreactive(this.localStats.get.bind(this.localStats));
+    for (let propName of ['newDocCount', 'totalDocCount', 'latestDocTime', 'selector']) {
+      localStats[propName] = serverStats[propName];
+    }
+    this.localStats.set(localStats);
   }
 
   /**
@@ -384,9 +387,10 @@ class InfiniLoadScope {
    * @private
    */
   _setLastLoadTimeAutorun (comp) {
-    let latestDocTime = this.latestDocTime.get();
+    let localStats = this.localStats.get(),
+        latestDocTime = localStats.latestDocTime || 0;
     if (latestDocTime > 0) {
-      this.lastLoadTime.set(latestDocTime);
+      this.lastLoadTime = latestDocTime;
       this.updateLoadOptionsNonReactive();
       comp.stop();
     }
