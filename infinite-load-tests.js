@@ -2,19 +2,26 @@ const dataCollection = new Mongo.Collection('test');
 
 if (Meteor.isServer) {
   Tinytest.add('Server side instantiation', function (test) {
-    InfiniLoad(dataCollection);
+    InfiniLoad(dataCollection, {
+      verbose: true
+    });
     test.ok();
   });
 }
 
 if (Meteor.isClient) {
+  window.data = dataCollection;
   Tinytest.add('Client side instantiation', function (test) {
-    const infini = InfiniLoad(dataCollection);
+    const infini = InfiniLoad(dataCollection, {
+      verbose: true
+    });
     test.ok();
   });
 
   Tinytest.add('Client side properties', function (test) {
-    const infini = InfiniLoad(dataCollection);
+    const infini = InfiniLoad(dataCollection, {
+      verbose: true
+    });
     const propTypes = {
       _id: String,
       originalCollection: Mongo.Collection,
@@ -42,13 +49,26 @@ if (Meteor.isClient) {
   });
 
   Tinytest.add('Instances are cached and reused', function (test) {
-    const infini1 = InfiniLoad(dataCollection);
-    const infini2 = InfiniLoad(dataCollection);
+    const infini1 = InfiniLoad(dataCollection, {
+      verbose: true
+    });
+    const infini2 = InfiniLoad(dataCollection, {
+      verbose: true
+    });
     test.equal(infini1, infini2);
   });
 
-  Tinytest.add('Empty on start', function (test) {
-    const infini = InfiniLoad(dataCollection);
+  Tinytest.add('State before start', function (test) {
+    const infini = InfiniLoad(dataCollection, {
+      verbose: true
+    });
+    window.infini = infini;
     test.equal(infini.find().count(), 0);
+    test.equal(infini.count(), 0);
+    test.equal(infini.countMore(), 0);
+    test.equal(infini.countNew(), 0);
+    test.equal(infini.countTotal(), 0);
+    test.equal(infini.hasMore(), false);
+    test.equal(infini.hasNew(), false);
   });
 }
