@@ -161,6 +161,7 @@ if (Meteor.isClient) {
   Tinytest.addAsync('Test data link - preparation', function (test, next) {
     testData.initialLimit = Math.ceil(Math.random() * 30);
     testData.limitIncrement = Math.ceil(Math.random() * 30);
+    testData.expectedCount = testData.initialLimit;
     // Make sure to load more at least 10 times.
     testData.expectedTotal = testData.initialLimit + testData.limitIncrement * 10;
 
@@ -181,14 +182,15 @@ if (Meteor.isClient) {
   });
 
   Tinytest.addAsync('Test data link - count old and load more', function (test, next) {
-    let expectedCount = testData.initialLimit;
     const onReadyOrUpdate = function (collection) {
-      test.equal(this.count(), expectedCount);
+      test.equal(this.count(), testData.expectedCount);
+      test.equal(this.hasNew(), false);
       test.equal(this.countNew(), 0);
       test.equal(this.countTotal(), testData.expectedTotal);
-      test.equal(this.countMore(), testData.expectedTotal - expectedCount);
-      if (testData.expectedTotal - expectedCount > 0) {
-        expectedCount = Math.min(expectedCount + testData.limitIncrement, testData.expectedTotal);
+      test.equal(this.hasMore(), testData.expectedTotal > testData.expectedCount);
+      test.equal(this.countMore(), testData.expectedTotal - testData.expectedCount);
+      if (testData.expectedTotal - testData.expectedCount > 0) {
+        testData.expectedCount = Math.min(testData.expectedCount + testData.limitIncrement, testData.expectedTotal);
         this.loadMore();
       } else {
         next();
