@@ -140,7 +140,7 @@ class InfiniLoadScope {
     let totalDocCount = this.totalDocCount.get(),
         newDocCount = this.newDocCount.get(),
         listLoadLimit = this.listLoadLimit.get();
-    return totalDocCount - newDocCount - listLoadLimit;
+    return Math.max(totalDocCount - newDocCount - listLoadLimit, 0);
   }
 
   /**
