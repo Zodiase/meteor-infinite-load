@@ -29,6 +29,7 @@ Package.onTest(function(api) {
   api.use([
     'ecmascript',
     'tinytest',
+    'underscore',
     'check',
     'mongo'
   ]);
