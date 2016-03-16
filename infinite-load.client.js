@@ -133,7 +133,8 @@ class InfiniLoadScope {
     }
     this.verbose = args.verbose;
     this.log = args.log;
-    this.loadOptions = new ReactiveVar(null);
+    this.statsSubscribeParameters = new ReactiveVar(null);
+    this.contentSubscribeParameters = new ReactiveVar(null);
     this.computations = {};
     this.subscriptions = {};
     this.loadedDocPattern = new ReactiveVar({});
@@ -294,13 +295,15 @@ class InfiniLoadScope {
    * @returns {Object}
    */
   updateLoadOptions () {
-    let newLoadOptions = {
+    this.statsSubscribeParameters.set({
+      'args': this.serverArgs.get(),
+      'lastLoadTime': this.lastLoadTime.get()
+    });
+    this.contentSubscribeParameters.set({
       'args': this.serverArgs.get(),
       'limit': this.listLoadLimit.get(),
       'lastLoadTime': this.lastLoadTime.get()
-    };
-    this.loadOptions.set(newLoadOptions);
-    return newLoadOptions;
+    });
   }
 
   /**
@@ -349,12 +352,7 @@ class InfiniLoadScope {
    * @private
    */
   _subscribeStatsAutorun (comp) {
-    let serverArgs = this.serverArgs.get(),
-        lastLoadTime = this.lastLoadTime.get(),
-        parameters = {
-          'args': serverArgs,
-          'lastLoadTime': lastLoadTime
-        }
+    let parameters = this.statsSubscribeParameters.get(),
         onSubscriptionReady = this._onStatsSubscribed.bind(this);
     if (this.verbose) {
       this.log(this.id, 'Subscribing status', parameters);
@@ -400,7 +398,7 @@ class InfiniLoadScope {
    * @private
    */
   _subscribeContentAutorun (comp) {
-    let parameters = this.loadOptions.get();
+    let parameters = this.contentSubscribeParameters.get();
     if (this.verbose) {
       this.log(this.id, 'Data subscription parameters', parameters);
     }
