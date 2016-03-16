@@ -108,8 +108,7 @@ InfiniLoad = function (collection, options) {
     var now, self, initializing, selector,
         totalDocCount, totalDocCursor, totalDocHandle,
         latestDocTime, latestDocCursor,
-        lastLoadTimeComparingValue,
-        newDocCount, newDocCursor, newDocHandle,
+        newDocCount,
         newDocSelector,
         GetReturnObject, Changed;
 
@@ -168,21 +167,7 @@ InfiniLoad = function (collection, options) {
     }
 
     // Get what's new since last loading.
-    lastLoadTimeComparingValue = timeValueConversion[_timeFieldType](options['lastLoadTime'])
     newDocCount = 0;
-    newDocSelector = {};
-    newDocSelector[_timeFieldName] = {
-      '$gt': lastLoadTimeComparingValue
-    };
-    newDocCursor = collection.find({
-      '$and': [
-        selector,
-        newDocSelector
-      ]
-    }, {
-      'sort': _countingSort,
-      'fields': _countingFields
-    });
 
     GetReturnObject = function () {
       return {
@@ -196,28 +181,27 @@ InfiniLoad = function (collection, options) {
       self.changed(_statsCollName, 0, GetReturnObject());
     };
 
-    totalDocHandle = totalDocCursor.observeChanges({
-      'added': function (id, fields) {
+    totalDocHandle = totalDocCursor.observe({
+      'added': function (doc) {
         totalDocCount++;
         // Time field value must be able to be converted to a number.
-        let timeValue = Number(fields[_timeFieldName]);
+        let timeValue = Number(doc[_timeFieldName]);
+        // See if this doc is the latest on server.
         if (timeValue > latestDocTime) {
           latestDocTime = timeValue;
         }
+        // If this doc is new to the client, update new count.
+        if (timeValue > options['lastLoadTime']) {
+          newDocCount++;
+        }
         if (!initializing) Changed();
       },
-      'removed': function (id) {
+      'removed': function (doc) {
         totalDocCount--;
-        Changed();
-      }
-    });
-    newDocHandle = newDocCursor.observeChanges({
-      'added': function (id) {
-        newDocCount++;
-        if (!initializing) Changed();
-      },
-      'removed': function (id) {
-        newDocCount--;
+        // If this doc is new to the client, update new count.
+        if (timeValue > options['lastLoadTime']) {
+          newDocCount--;
+        }
         Changed();
       }
     });
@@ -228,7 +212,6 @@ InfiniLoad = function (collection, options) {
 
     self.onStop(function () {
       totalDocHandle.stop();
-      newDocHandle.stop();
     });
 
     return;
