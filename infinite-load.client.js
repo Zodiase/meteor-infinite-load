@@ -150,20 +150,11 @@ class InfiniLoadScope {
     check(events, String);
     check(handler, Function);
 
-    let eventsAry = events.split(' ');
+    let eventsAry = events.split(' ')
+                          .filter((x) => x.length > 0 &&
+                                  this.supportedEvents.indexOf(x) > -1);
     for (let eventName of eventsAry) {
-      // Skip empty names.
-      if (eventName.length === 0) {
-        continue;
-      }
-      //else
-      // Throw for unsupported events.
-      if (this.supportedEvents.indexOf(eventName) === -1) {
-        throw new RangeError('Unsupported event.');
-      }
-      //else
-      let handlers = this.eventHandlers[eventName];
-      handlers.push(handler);
+      this.eventHandlers[eventName].push(handler);
     }
     return this.API;
   }
@@ -175,27 +166,30 @@ class InfiniLoadScope {
    * @returns {InfiniLoadClient}
    */
   off (events, handler) {
-    check(events, String);
-    check(handler, Function);
+    check(events, Match.Optional(String));
+    check(handler, Match.Optional(Function));
 
-    let eventsAry = events.split(' ');
-    for (let eventName of eventsAry) {
-      // Skip empty names.
-      if (eventName.length === 0) {
-        continue;
-      }
-      //else
-      // Throw for unsupported events.
-      if (this.supportedEvents.indexOf(eventName) === -1) {
-        throw new RangeError('Unsupported event.');
-      }
-      //else
-      let handlers = this.eventHandlers[eventName];
-      let handlerIndex = handlers.indexOf(handler);
-      if (handlerIndex > -1) {
-        handlers.splice(handlerIndex, 1);
-      }
+    let eventsAry;
+
+    if (typeof events === 'undefined') {
+      // Remove all handlers.
+      eventsAry = this.supportedEvents;
+    } else {
+      // Remove handlers of events.
+      eventsAry = events.split(' ')
+                        .filter((x) => x.length > 0 &&
+                                this.supportedEvents.indexOf(x) > -1);
     }
+    eventsAry.forEach((x) => {
+      if (typeof handler === 'undefined') {
+        this.eventHandlers[x] = [];
+      } else {
+        let handlerIndex = this.eventHandlers[x].indexOf(handler);
+        if (handlerIndex > -1) {
+          this.eventHandlers[x].splice(handlerIndex, 1);
+        }
+      }
+    });
     return this.API;
   }
 
