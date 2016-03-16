@@ -442,6 +442,9 @@ class InfiniLoadScope {
     this.computations['saveStats'] = this._autorun(this._saveStatsAutorun.bind(this));
     this.computations['setLastLoadTime'] = this._autorun(this._setLastLoadTimeAutorun.bind(this));
     this.computations['subscribeContent'] = this._autorun(this._subscribeContentAutorun.bind(this));
+    if (this.verbose) {
+      this.log(this.id, 'Started');
+    }
   }
 
   /**
@@ -472,6 +475,9 @@ class InfiniLoadScope {
     delete this._subscribe;
     this.initialDataReady = false;
     this._started = false;
+    if (this.verbose) {
+      this.log(this.id, 'Stopped');
+    }
   }
 
   /**
