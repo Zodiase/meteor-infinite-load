@@ -350,7 +350,7 @@ class InfiniLoadScope {
    */
   _onContentSubscribed () {
     if (this.verbose) {
-      this.log(this.id, 'Data subscription ready');
+      this.log(this.id, 'Data subscription ready', this.initialDataReady);
     }
     if (!this.initialDataReady) {
       this.initialDataReady = true;
