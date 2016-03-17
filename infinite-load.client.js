@@ -317,6 +317,22 @@ class InfiniLoadScope {
   }
 
   /**
+   * Helper function for calling event handlers.
+   * @private
+   */
+  _callEventHandlers (eventName, context, args) {
+    check(eventName, String);
+    check(args, Array);
+    if (this.supportedEvents.indexOf(eventName) === -1) {
+      return;
+    }
+    //else
+    for (let handler of this.eventHandlers[eventName]) {
+      handler.apply(context, args);
+    }
+  }
+
+  /**
    * Callback when stats are pulled from the server.
    * Not functional at this time.
    * @private
@@ -338,13 +354,9 @@ class InfiniLoadScope {
     }
     if (!this.initialDataReady) {
       this.initialDataReady = true;
-      for (let handler of this.eventHandlers.ready) {
-        handler.call(this.API, this.collection);
-      }
+      this._callEventHandlers('ready', this.API, [this.collection]);
     } else {
-      for (let handler of this.eventHandlers.update) {
-        handler.call(this.API, this.collection);
-      }
+      this._callEventHandlers('update', this.API, [this.collection]);
     }
   }
 
