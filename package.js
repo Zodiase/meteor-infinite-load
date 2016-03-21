@@ -1,6 +1,6 @@
 Package.describe({
   name: 'zodiase:infinite-load',
-  version: '0.1.1',
+  version: '0.2.0',
   // Brief, one-line summary of the package.
   summary: 'A helper library for loading items from a collection incrementally.',
   // URL to the Git repository containing the source code for this package.
@@ -20,8 +20,10 @@ Package.onUse(function(api) {
     'tracker',
     'reactive-var'
   ]);
-  api.addFiles('infinite-load.client.js', 'client');
-  api.addFiles('infinite-load.server.js', 'server');
+  api.addFiles('src/setup.js', ['client', 'server']);
+  api.addFiles('src/client/lib.js', 'client');
+  api.addFiles('src/server/lib.js', 'server');
+  api.addFiles('src/export.js', ['client', 'server']);
   api.export('InfiniLoad');
 });
 
@@ -35,5 +37,5 @@ Package.onTest(function(api) {
     'mongo'
   ]);
   api.use('zodiase:infinite-load');
-  api.addFiles('infinite-load-tests.js');
+  api.addFiles('tests/tests.js');
 });

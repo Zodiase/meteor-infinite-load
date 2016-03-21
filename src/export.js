@@ -1,0 +1,1 @@
+InfiniLoad = module.exports;
