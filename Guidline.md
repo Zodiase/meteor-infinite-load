@@ -4,3 +4,5 @@
 * Stats document is always updated the last, so when that update is a signal to changes.
 * Each unique instance (with unique ID) creates a new private collection for subscribed data.
 * An instance has to provide an interface for finding and fetching data documents, while hiding the stats document.
+* Instantiation should not have side-effects.
+    * ?

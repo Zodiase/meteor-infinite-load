@@ -15,12 +15,13 @@ Package.onUse(function(api) {
   api.use([
     'ecmascript',
     'mongo',
-    'check',
+    'zodiase:check',
     'blaze-html-templates',
     'tracker',
     'reactive-var'
   ]);
   api.addFiles('src/setup.js', ['client', 'server']);
+  api.addFiles('src/base.js', ['client', 'server']);
   api.addFiles('src/client/lib.js', 'client');
   api.addFiles('src/server/lib.js', 'server');
   api.addFiles('src/export.js', ['client', 'server']);
