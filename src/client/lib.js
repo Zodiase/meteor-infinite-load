@@ -1,6 +1,35 @@
-class InfiniLoad extends BaseClass {
-  constructor (collection, options) {
+/**
+ * Client side interface for loading collection data incrementally.
+ * @extends InfiniLoadBase
+ */
+class InfiniLoadClient extends InfiniLoadBase {
+
+  /**
+   * Configurable options for client side.
+   * @typedef {Object} ClientOptions
+   * @extends CommonOptions
+   */
+
+  /**
+   * Creates a new client side InfiniLoad instance for a Mongo.Collection.
+   * @inheritdoc
+   * @param {Mongo.Collection} collection The collection this InfiniLoad instance belongs to.
+   * @param {ClientOptions} [options] Optional configurations.
+   */
+  constructor (collection, options = {}) {
     super(collection, options);
+
+    /**
+     * Launch sequence:
+     *   - Check parameters.
+     *   - Initialize variables.
+     */
+
+    /**
+     * Store callback functions for each event.
+     * @private
+     * @type {Object.<String, Function>}
+     */
     this._eventHandlers = {};
   }
 
@@ -18,7 +47,7 @@ class InfiniLoad extends BaseClass {
    */
   get rawCollection () {
     // Shortcut.
-    const collections = InfiniLoad._DATA.collections;
+    const collections = self._DATA.collections;
 
     const collectionName = this.originalCollection._name;
     const instanceId = this.id;
@@ -41,7 +70,7 @@ class InfiniLoad extends BaseClass {
    * @returns {Object}
    */
   get stats () {
-    return this.rawCollection.findOne(InfiniLoad._CONST.STATS_DOCUMENT_ID);
+    return this.rawCollection.findOne(self._CONST.STATS_DOCUMENT_ID);
   }
 
   /**
@@ -54,7 +83,7 @@ class InfiniLoad extends BaseClass {
   find (selector = {}, options = {}) {
     const realSelector = {
       $and: [
-        InfiniLoad._CONST.FILTER_STATS_DOCUMENT,
+        self._CONST.FILTER_STATS_DOCUMENT,
         selector
       ]
     };
@@ -141,14 +170,14 @@ class InfiniLoad extends BaseClass {
    * Attach an event handler function for one or more events.
    * @param {String} events A list of space separated event names.
    * @param {Function} handler The callback function.
-   * @returns {InfiniLoad} For chaining.
+   * @returns {InfiniLoadClient} For chaining.
    */
   on (events, handler) {
     check(events, String);
     check(handler, Function);
 
     // Shortcut.
-    const eList = InfiniLoad._CONST.SUPPORTED_EVENTS;
+    const eList = self._CONST.SUPPORTED_EVENTS;
 
     let eventsAry = events.split(' ')
                           .filter((x) => x.length > 0 && eList.indexOf(x) > -1);
@@ -162,14 +191,14 @@ class InfiniLoad extends BaseClass {
    * Remove an event handler.
    * @param {String} events A list of space separated event names.
    * @param {Function} handler The matching callback function.
-   * @returns {InfiniLoad} For chaining.
+   * @returns {InfiniLoadClient} For chaining.
    */
   off (events, handler) {
     check(events, Match.Optional(String));
     check(handler, Match.Optional(Function));
 
     // Shortcut.
-    const eList = InfiniLoad._CONST.SUPPORTED_EVENTS;
+    const eList = self._CONST.SUPPORTED_EVENTS;
 
     let eventsAry;
 
@@ -207,7 +236,7 @@ class InfiniLoad extends BaseClass {
     check(args, Array);
 
     // Shortcut.
-    const eList = InfiniLoad._CONST.SUPPORTED_EVENTS;
+    const eList = self._CONST.SUPPORTED_EVENTS;
 
     if (eList.indexOf(eventName) === -1) {
       return;
@@ -223,12 +252,17 @@ class InfiniLoad extends BaseClass {
   stop () {}
 
 }
+const self = InfiniLoadClient;
 
-// Gather all constants here for easier management.
-InfiniLoad._CONST = _.extend({}, BaseClass._CONST, {
+/**
+ * Gather all constants here for easier management.
+ * @private
+ * @type {Object}
+ */
+InfiniLoadClient._CONST = _.extend({}, InfiniLoadBase._CONST, /** @lends InfiniLoadClient._CONST */{
   FILTER_STATS_DOCUMENT: {
     _id: {
-      $ne: BaseClass._CONST.STATS_DOCUMENT_ID
+      $ne: InfiniLoadBase._CONST.STATS_DOCUMENT_ID
     }
   },
   SUPPORTED_EVENTS: [
@@ -237,16 +271,21 @@ InfiniLoad._CONST = _.extend({}, BaseClass._CONST, {
   ]
 });
 
-// Store runtime data.
-InfiniLoad._DATA = _.extend({}, BaseClass._DATA, {
+/**
+ * Store runtime data.
+ * @private
+ * @type {Object}
+ */
+InfiniLoadClient._DATA = _.extend({}, InfiniLoadBase._DATA, /** @lends InfiniLoadClient._DATA */{
   /**
     * Each unique instance for a unique collection would have a dedicated
     *     collection for its data. So this is a map of map of collections.
-    * I.e. A instance with ID "foo" for collection "bar" would have its
+    * I.e. An instance with ID "foo" for collection "bar" would have its
     *     collection at `collections.bar.foo`.
     * These collections are only needed on client side.
+    * @type {Map.<String, Map.<String, Mongo.Collection>>}
     */
   collections: new Map()
 });
 
-module.exports = InfiniLoad;
+module.exports = InfiniLoadClient;

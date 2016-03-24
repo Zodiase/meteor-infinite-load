@@ -1,8 +1,20 @@
-class InfiniLoadBase {
+/**
+ * Common interface shared by both client and server code.
+ * For inheritance only, should not be instantiated directly.
+ */
+InfiniLoadBase = class InfiniLoadBase {
 
   /**
+   * Configurable options existing on both client side and server side.
+   * @typedef {Object} CommonOptions
+   * @property {String} [id="default"] The ID of this instance unique within this collection. Case in-sensitive.
+   * @property {Boolean} [verbose=false] Set to `true` to turn on the verbose mode. More logs will be spit out.
+   */
+
+  /**
+   * Common constructor shared by both client and server code.
    * @param {Mongo.Collection} collection The collection this InfiniLoad instance belongs to.
-   * @param {Object} [options] Optional settings.
+   * @param {CommonOptions} [options] Optional configurations.
    */
   constructor (collection, options = {}) {
     check(collection, Mongo.Collection, 'Invalid collection.');
@@ -12,8 +24,10 @@ class InfiniLoadBase {
     }));
 
     this._originalCollection = collection;
-    this._id = options.id || InfiniLoadBase._CONST.DEFAULT_ID;
-    this._collectionName = InfiniLoadBase.getInstanceCollectionName(this._originalCollection._name, this._id);
+    this._id = (options.id || self._CONST.DEFAULT_ID).toLowerCase();
+    this._verbose = options.verbose || false;
+
+    this._collectionName = self.getInstanceCollectionName(this._originalCollection._name, this._id);
   }
 
   /**
@@ -27,9 +41,9 @@ class InfiniLoadBase {
    * @returns {String}
    */
   static getInstanceCollectionName (collectionName, instanceId) {
-    const d = InfiniLoadBase._CONST.NAMESPACE_DELIMITER;
+    const d = self._CONST.NAMESPACE_DELIMITER;
 
-    return InfiniLoadBase._CONST.COLLECTION_NAMESPACE +
+    return self._CONST.COLLECTION_NAMESPACE +
            d + encodeURIComponent(collectionName) +
            d + encodeURIComponent(instanceId);
   }
@@ -68,15 +82,24 @@ class InfiniLoadBase {
    */
 
 }
-// Gather all constants here for easier management.
+const self = InfiniLoadBase;
+
+/**
+ * Gather all constants here for easier management.
+ * @private
+ * @type {Object}
+ */
 InfiniLoadBase._CONST = {
   DEFAULT_ID: 'default',
   COLLECTION_NAMESPACE: '__InfiniLoad',
   NAMESPACE_DELIMITER: '/',
   STATS_DOCUMENT_ID: 0
 };
-// Store runtime data.
+
+/**
+ * Store runtime data.
+ * @private
+ * @type {Object}
+ */
 InfiniLoadBase._DATA = {
 };
-
-BaseClass = InfiniLoadBase;
