@@ -1,6 +1,7 @@
 class InfiniLoad extends BaseClass {
   constructor (collection, options) {
     super(collection, options);
+    this._eventHandlers = {};
   }
 
   /**
@@ -120,17 +121,102 @@ class InfiniLoad extends BaseClass {
     return this.countNew() > 0;
   }
 
-  loadMore () {}
+  /**
+   * Load more old documents from server.
+   * @param {Number} [amount] The amount to load. If omitted, the default amount would be used.
+   *! @returns {Object} An interface to add `onReady` handlers to this specific action.
+   */
+  loadMore (amount) {}
 
+  /**
+   * Load all new documents from server.
+   */
   loadNew () {}
 
   setServerParameters () {}
 
   getServerParameters () {}
 
-  on () {}
+  /**
+   * Attach an event handler function for one or more events.
+   * @param {String} events A list of space separated event names.
+   * @param {Function} handler The callback function.
+   * @returns {InfiniLoad} For chaining.
+   */
+  on (events, handler) {
+    check(events, String);
+    check(handler, Function);
 
-  off () {}
+    // Shortcut.
+    const eList = InfiniLoad._CONST.SUPPORTED_EVENTS;
+
+    let eventsAry = events.split(' ')
+                          .filter((x) => x.length > 0 && eList.indexOf(x) > -1);
+    for (let eventName of eventsAry) {
+      this._eventHandlers[eventName].push(handler);
+    }
+    return this;
+  }
+
+  /**
+   * Remove an event handler.
+   * @param {String} events A list of space separated event names.
+   * @param {Function} handler The matching callback function.
+   * @returns {InfiniLoad} For chaining.
+   */
+  off (events, handler) {
+    check(events, Match.Optional(String));
+    check(handler, Match.Optional(Function));
+
+    // Shortcut.
+    const eList = InfiniLoad._CONST.SUPPORTED_EVENTS;
+
+    let eventsAry;
+
+    if (typeof events === 'undefined') {
+      // Remove all handlers.
+      eventsAry = eList;
+    } else {
+      // Remove handlers of events.
+      eventsAry = events.split(' ')
+                        .filter((x) => x.length > 0 && eList.indexOf(x) > -1);
+    }
+    eventsAry.forEach((x) => {
+      if (typeof handler === 'undefined') {
+        this._eventHandlers[x] = [];
+      } else {
+        let handlerIndex = this._eventHandlers[x].indexOf(handler);
+        if (handlerIndex > -1) {
+          this._eventHandlers[x].splice(handlerIndex, 1);
+        }
+      }
+    });
+    return this;
+  }
+
+  /**
+   * Helper function for calling event handlers.
+   * @private
+   * @param {String} eventName Name of the event.
+   * @param {Object} context Context for the callbacks.
+   * @param {Array.<*>} args The arguments to be passed to callbacks.
+   */
+  _callEventHandlers (eventName, context, args) {
+    check(eventName, String);
+    check(context, Object);
+    check(args, Array);
+
+    // Shortcut.
+    const eList = InfiniLoad._CONST.SUPPORTED_EVENTS;
+
+    if (eList.indexOf(eventName) === -1) {
+      return;
+    }
+    //else
+    for (let handler of this._eventHandlers[eventName]) {
+      handler.apply(context, args);
+    }
+  }
 
   start () {}
 
@@ -144,7 +230,11 @@ InfiniLoad._CONST = _.extend({}, BaseClass._CONST, {
     _id: {
       $ne: BaseClass._CONST.STATS_DOCUMENT_ID
     }
-  }
+  },
+  SUPPORTED_EVENTS: [
+    'ready',
+    'update'
+  ]
 });
 
 // Store runtime data.
