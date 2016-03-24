@@ -39,6 +39,9 @@ class InfiniLoad extends BaseClass {
    * Instance methods.
    */
 
+  /**
+   * Same as `Mongo.Collection.prototype.find`.
+   */
   find (selector = {}, options = {}) {
     const realSelector = {
       $and: [
@@ -49,7 +52,13 @@ class InfiniLoad extends BaseClass {
     return this.rawCollection.find(realSelector, options);
   }
 
-  findOne () {}
+  /**
+   * Same as `Mongo.Collection.prototype.findOne`.
+   */
+  findOne (selector = {}, options = {}) {
+    options.limit = 1;
+    return this.find(selector, options).fetch()[0];
+  }
 
   count () {}
 

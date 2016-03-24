@@ -87,6 +87,7 @@ if (Meteor.isClient) {
   Tinytest.add('State before starting', function (test) {
     const inst = new InfiniLoad(dataCollection);
     test.equal(inst.find({}).count(), 0);
+    test.equal(typeof inst.findOne({}), 'undefined');
     test.equal(inst.count(), 0);
     test.equal(inst.countMore(), 0);
     test.equal(inst.countNew(), 0);
