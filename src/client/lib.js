@@ -39,7 +39,15 @@ class InfiniLoad extends BaseClass {
    * Instance methods.
    */
 
-  find () {}
+  find (selector = {}, options = {}) {
+    const realSelector = {
+      $and: [
+        InfiniLoad._CONST.FILTER_STATS_DOCUMENT,
+        selector
+      ]
+    };
+    return this.rawCollection.find(realSelector, options);
+  }
 
   findOne () {}
 
@@ -74,11 +82,16 @@ class InfiniLoad extends BaseClass {
 }
 
 // Gather all constants here for easier management.
-InfiniLoad._CONST = {
-};
+InfiniLoad._CONST = _.extend({}, BaseClass._CONST, {
+  FILTER_STATS_DOCUMENT: {
+    _id: {
+      $ne: BaseClass._CONST.STATS_DOCUMENT_ID
+    }
+  }
+});
 
 // Store runtime data.
-InfiniLoad._DATA = {
+InfiniLoad._DATA = _.extend({}, BaseClass._DATA, {
   /**
     * Each unique instance for a unique collection would have a dedicated
     *     collection for its data. So this is a map of map of collections.
@@ -87,6 +100,6 @@ InfiniLoad._DATA = {
     * These collections are only needed on client side.
     */
   collections: new Map()
-};
+});
 
 module.exports = InfiniLoad;

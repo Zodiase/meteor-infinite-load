@@ -72,7 +72,8 @@ class InfiniLoadBase {
 InfiniLoadBase._CONST = {
   DEFAULT_ID: 'default',
   COLLECTION_NAMESPACE: '__InfiniLoad',
-  NAMESPACE_DELIMITER: '/'
+  NAMESPACE_DELIMITER: '/',
+  STATS_DOCUMENT_ID: 0
 };
 // Store runtime data.
 InfiniLoadBase._DATA = {
