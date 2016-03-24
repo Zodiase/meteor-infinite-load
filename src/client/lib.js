@@ -36,6 +36,14 @@ class InfiniLoad extends BaseClass {
   }
 
   /**
+   * Get the stats document.
+   * @returns {Object}
+   */
+  get stats () {
+    return this.rawCollection.findOne(InfiniLoad._CONST.STATS_DOCUMENT_ID);
+  }
+
+  /**
    * Instance methods.
    */
 
@@ -60,17 +68,57 @@ class InfiniLoad extends BaseClass {
     return this.find(selector, options).fetch()[0];
   }
 
-  count () {}
+  /**
+   * Return the number of documents that have been loaded.
+   * @returns {Number}
+   */
+  count () {
+    const stats = this.stats;
+    return (!stats) ? 0 : stats.loadedDocumentCount;
+  }
 
-  countMore () {}
+  /**
+   * Return the number of old documents that have not been loaded yet.
+   * @returns {Number}
+   */
+  countMore () {
+    const stats = this.stats;
+    return (!stats) ? 0 : stats.moreDocumentToLoadCount;
+  }
 
-  countNew () {}
+  /**
+   * Return the number of new documents that have not been loaded yet.
+   * @returns {Number}
+   */
+  countNew () {
+    const stats = this.stats;
+    return (!stats) ? 0 : stats.newDocumentToLoadCount;
+  }
 
-  countTotal () {}
+  /**
+   * Return the number of all documents in the collection.
+   * @returns {Number}
+   */
+  countTotal () {
+    const stats = this.stats;
+    return (!stats) ? 0 : stats.totalDocumentCount;
+  }
 
-  hasMore () {}
+  /**
+   * Returns `true` if there are more old documents to load.
+   * @returns {Boolean}
+   */
+  hasMore () {
+    return this.countMore() > 0;
+  }
 
-  hasNew () {}
+  /**
+   * Returns `true` if there are more new documents to load.
+   * @returns {Boolean}
+   */
+  hasNew () {
+    return this.countNew() > 0;
+  }
 
   loadMore () {}
 
