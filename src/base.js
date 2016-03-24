@@ -1,11 +1,15 @@
 class InfiniLoadBase {
-  constructor (collection, options) {
+
+  /**
+   * @param {Mongo.Collection} collection The collection this InfiniLoad instance belongs to.
+   * @param {Object} [options] Optional settings.
+   */
+  constructor (collection, options = {}) {
     check(collection, Mongo.Collection, 'Invalid collection.');
-    check(options, Match.Optional(Match.ObjectIncluding({
+    check(options, Match.ObjectIncluding({
       'id': Match.Optional(String),
       'verbose': Match.Optional(Boolean)
-    })));
-    options = options || {};
+    }));
 
     this._originalCollection = collection;
     this._id = options.id || InfiniLoadBase._CONST.DEFAULT_ID;
