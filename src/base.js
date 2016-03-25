@@ -28,6 +28,12 @@ InfiniLoadBase = class InfiniLoadBase {
     this._verbose = options.verbose || false;
 
     this._collectionName = self.getInstanceCollectionName(this._originalCollection._name, this._id);
+
+    self._registerInstance(this);
+
+    if (!this._verbose) {
+      this._log = self._CONST.OP_NOOP;
+    }
   }
 
   /**
@@ -46,6 +52,25 @@ InfiniLoadBase = class InfiniLoadBase {
     return self._CONST.COLLECTION_NAMESPACE +
            d + encodeURIComponent(collectionName) +
            d + encodeURIComponent(instanceId);
+  }
+
+  /**
+   * Add the instance to the tracking list. Throws if it already exists.
+   * @param {InfiniLoadBase} instance
+   */
+  static _registerInstance (instance) {
+    // Shortcut.
+    const instances = self._DATA.instances;
+
+    const collectionName = instance.originalCollection._name;
+    const instanceId = instance.id;
+    const instanceCollectionName = instance.collectionName;
+
+    if (!instances.has(instanceCollectionName)) {
+      instances.set(instanceCollectionName, instance);
+    } else {
+      throw new Error('There is already an InfiniLoad instance with id "' + instanceId + '" for collection "' + collectionName + '".');
+    }
   }
 
   /**
@@ -81,6 +106,13 @@ InfiniLoadBase = class InfiniLoadBase {
    * Instance methods.
    */
 
+  /**
+   * Shortcut to `console.log()` for easier disabling.
+   * @private
+   */
+  _log () {
+    console.log('InfiniLoad', this.collectionName, ...arguments);
+  }
 }
 const self = InfiniLoadBase;
 
@@ -93,7 +125,8 @@ InfiniLoadBase._CONST = {
   DEFAULT_ID: 'default',
   COLLECTION_NAMESPACE: '__InfiniLoad',
   NAMESPACE_DELIMITER: '/',
-  STATS_DOCUMENT_ID: 0
+  STATS_DOCUMENT_ID: 0,
+  OP_NOOP: () => {}
 };
 
 /**
@@ -102,4 +135,12 @@ InfiniLoadBase._CONST = {
  * @type {Object}
  */
 InfiniLoadBase._DATA = {
+  /**
+    * Given all the requirements, each unique collection-id pair can only have
+    *     one instance, just like a `Mongo.Collection`. This applies to both
+    *     client side and server side.
+    * So store all the instances here for tracking.
+    * @type {Map.<String, InfiniLoadBase>}
+    */
+  instances: new Map()
 };

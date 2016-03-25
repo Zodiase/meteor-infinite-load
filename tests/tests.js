@@ -7,27 +7,65 @@ if (Meteor.isClient) window.dataCollection = dataCollection;
 // Alias of the library namespace, make name changing easier.
 const lib = InfiniLoad;
 
+// A record of existing instances so we don't run into name collisions unintentionally.
+const instances = new Map();
+// Helper function for generating an ID that does not exist in `instances`.
+function newInstanceId () {
+  let id = '';
+  do {
+    id = 'test_' + Math.random();
+  } while (instances.has(id));
+  return id;
+}
+// Helper function for checking if an instance exists.
+function hasInstance (key) {
+  return instances.has(key);
+}
+// Helper function for saving instances.
+function saveInstance (key, instance) {
+  if (instances.has(key)) {
+    throw new Error('Instance with id "' + key + '" already exists.');
+  }
+  instances.set(key, instance);
+}
+
+// Basic checks.
+check(lib, Function);
+
 // Server side resetting for each pass of tests.
 if (Meteor.isServer) {
   Tinytest.add('Reset all on test start', function (test) {
     dataCollection.remove({});
     test.ok();
   });
+  
+  Meteor.methods({
+    'newlib': (options) => {
+      check(options, Object);
+      options.id = newInstanceId();
+      options.verbose = true;
+      saveInstance(options.id, new lib(dataCollection, options));
+      return options.id;
+    }
+  });
 }
 
-Tinytest.add('Basics - Export', function (test) {
-  // Is defined.
-  test.isNotUndefined(lib);
-
-  // Is a class.
-  test.equal(typeof lib, 'function');
+Tinytest.add('Basics - Can not call InfiniLoad without new', function (test) {
+  test.throws(function () {
+    lib(dataCollection);
+  });
 });
 
 Tinytest.add('Basics - Instantiation', function (test) {
-  const inst = new InfiniLoad(dataCollection);
+  const id = newInstanceId();
+  const inst = new lib(dataCollection, {
+    id,
+    verbose: true
+  });
+  saveInstance(id, inst);
 
-  // Instance should have property `.id`.
-  test.isNotUndefined(inst.id);
+  // Instance should have matching property `.id`.
+  test.equal(inst.id, id);
 
   // Instance property `.id` should be read-only.
   const prevId = inst.id;
@@ -41,51 +79,65 @@ Tinytest.add('Basics - Instantiation', function (test) {
   test.equal(inst.originalCollection, dataCollection);
 });
 
-Tinytest.add('Basics - Instantiation with ID', function (test) {
-  const id = 'id';
-  const inst = new InfiniLoad(dataCollection, {
-    id: id
+Tinytest.add('Basics - Multiple Identical Instantiations throw', function (test) {
+  const id = newInstanceId();
+  const inst = new lib(dataCollection, {
+    id,
+    verbose: true
   });
-
-  // Instance property `.id` should match the given one.
-  test.equal(inst.id, id);
-});
-
-Tinytest.add('Basics - Multiple Identical Instantiations', function (test) {
-  const inst1 = new InfiniLoad(dataCollection);
-  const inst2 = new InfiniLoad(dataCollection);
-  const inst3 = new InfiniLoad(dataCollection);
-  test.ok();
+  saveInstance(id, inst);
+  
+  test.throws(function () {
+    const inst = new lib(dataCollection, {
+      id,
+      verbose: true
+    });
+  });
 });
 
 if (Meteor.isClient) {
-  Tinytest.add('Basics - Client side methods', function (test) {
-    const inst = new InfiniLoad(dataCollection);
-    const methodNames = [
-      'find',
-      'findOne',
-      'count',
-      'countMore',
-      'countNew',
-      'countTotal',
-      'hasMore',
-      'hasNew',
-      'loadMore',
-      'loadNew',
-      'setServerParameters',
-      'getServerParameters',
-      'on',
-      'off',
-      'start',
-      'stop'
-    ];
-    for (let key of methodNames) {
-      test.equal(typeof inst[key], 'function');
-    }
+  Tinytest.addAsync('Basics - Client side methods', function (test, next) {
+    const onLibReady = (error, result) => {
+      if (error) {
+        throw error;
+      }
+      const id = result;
+      const inst = new lib(dataCollection, {id});
+
+      const methodNames = [
+        'find',
+        'findOne',
+        'count',
+        'countMore',
+        'countNew',
+        'countTotal',
+        'hasMore',
+        'hasNew',
+        'loadMore',
+        'loadNew',
+        'setServerParameters',
+        'getServerParameters',
+        'on',
+        'off',
+        'start',
+        'stop'
+      ];
+      for (let key of methodNames) {
+        test.equal(typeof inst[key], 'function');
+      }
+      next();
+    };
+    Meteor.call('newlib', {}, onLibReady);
   });
 
-  Tinytest.add('State before starting', function (test) {
-    const inst = new InfiniLoad(dataCollection);
+  Tinytest.add('APIs - State before starting', function (test) {
+    const id = newInstanceId();
+    const inst = new lib(dataCollection, {
+      id,
+      verbose: true
+    });
+    saveInstance(id, inst);
+    
     test.equal(inst.find({}).count(), 0);
     test.equal(typeof inst.findOne({}), 'undefined');
     test.equal(inst.count(), 0);

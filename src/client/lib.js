@@ -18,6 +18,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    */
   constructor (collection, options = {}) {
     super(collection, options);
+    const me = this;
 
     /**
      * Launch sequence:
@@ -30,7 +31,11 @@ class InfiniLoadClient extends InfiniLoadBase {
      * @private
      * @type {Object.<String, Function>}
      */
-    this._eventHandlers = {};
+    me._eventHandlers = {};
+
+    //!
+    me._log('subscribe', me.collectionName);
+    Meteor.subscribe(me.collectionName, {requestId: '0'});
   }
 
   /**
