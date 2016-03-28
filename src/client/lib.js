@@ -6,21 +6,23 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Configurable options for client side.
-   * @typedef {Object} ClientOptions
-   * @extends CommonOptions
+   * @typedef {Object} InfiniLoadClient~ClientOptions
+   * @extends InfiniLoadBase~CommonOptions
    */
 
   /**
    * Creates a new client side InfiniLoad instance for a Mongo.Collection.
    * @inheritdoc
-   * @param {Mongo.Collection} collection The collection this InfiniLoad instance belongs to.
-   * @param {ClientOptions} [options] Optional configurations.
+   * @param {Mongo.Collection} collection
+   *        The collection this InfiniLoad instance belongs to.
+   * @param {InfiniLoadClient~ClientOptions} [options]
+   *        Optional configurations.
    */
   constructor (collection, options = {}) {
     super(collection, options);
     const me = this;
 
-    /**
+    /*
      * Launch sequence:
      *   - Check parameters.
      *   - Initialize variables.
@@ -157,7 +159,8 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Load more old documents from server.
-   * @param {Number} [amount] The amount to load. If omitted, the default amount would be used.
+   * @param {Number} [amount]
+   *        The amount to load. If omitted, the default amount would be used.
    *! @returns {Object} An interface to add `onReady` handlers to this specific action.
    */
   loadMore (amount) {}
@@ -173,9 +176,12 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Attach an event handler function for one or more events.
-   * @param {String} events A list of space separated event names.
-   * @param {Function} handler The callback function.
-   * @returns {InfiniLoadClient} For chaining.
+   * @param {String} events
+   *        A list of space separated event names.
+   * @param {Function} handler
+   *        The callback function.
+   * @returns {InfiniLoadClient}
+   *          For chaining.
    */
   on (events, handler) {
     check(events, String);
@@ -194,9 +200,12 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Remove an event handler.
-   * @param {String} events A list of space separated event names.
-   * @param {Function} handler The matching callback function.
-   * @returns {InfiniLoadClient} For chaining.
+   * @param {String} events
+   *        A list of space separated event names.
+   * @param {Function} handler
+   *        The matching callback function.
+   * @returns {InfiniLoadClient}
+   *          For chaining.
    */
   off (events, handler) {
     check(events, Match.Optional(String));
@@ -231,9 +240,12 @@ class InfiniLoadClient extends InfiniLoadBase {
   /**
    * Helper function for calling event handlers.
    * @private
-   * @param {String} eventName Name of the event.
-   * @param {Object} context Context for the callbacks.
-   * @param {Array.<*>} args The arguments to be passed to callbacks.
+   * @param {String} eventName
+   *        Name of the event.
+   * @param {Object} context
+   *        Context for the callbacks.
+   * @param {Array.<*>} args
+   *        The arguments to be passed to callbacks.
    */
   _callEventHandlers (eventName, context, args) {
     check(eventName, String);

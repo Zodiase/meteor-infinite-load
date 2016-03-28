@@ -6,15 +6,19 @@ InfiniLoadBase = class InfiniLoadBase {
 
   /**
    * Configurable options existing on both client side and server side.
-   * @typedef {Object} CommonOptions
-   * @property {String} [id="default"] The ID of this instance unique within this collection. Case in-sensitive.
-   * @property {Boolean} [verbose=false] Set to `true` to turn on the verbose mode. More logs will be spit out.
+   * @typedef {Object} InfiniLoadBase~CommonOptions
+   * @property {String} [id="default"]
+   *           The ID of this instance unique within this collection. Case in-sensitive.
+   * @property {Boolean} [verbose=false]
+   *           Set to `true` to turn on the verbose mode. More logs will be spit out.
    */
 
   /**
    * Common constructor shared by both client and server code.
-   * @param {Mongo.Collection} collection The collection this InfiniLoad instance belongs to.
-   * @param {CommonOptions} [options] Optional configurations.
+   * @param {Mongo.Collection} collection
+   *        The collection this InfiniLoad instance belongs to.
+   * @param {InfiniLoadBase~CommonOptions} [options]
+   *        Optional configurations.
    */
   constructor (collection, options = {}) {
     check(collection, Mongo.Collection, 'Invalid collection.');
@@ -42,8 +46,10 @@ InfiniLoadBase = class InfiniLoadBase {
 
   /**
    * Returns the name of the dedicated collection for the specified InfiniLoad instance.
-   * @param {String} collectionName Name of the collection this InfiniLoad instance belongs to.
-   * @param {String} instanceId Id of this InfiniLoad instance.
+   * @param {String} collectionName
+   *        Name of the collection this InfiniLoad instance belongs to.
+   * @param {String} instanceId
+   *        Id of this InfiniLoad instance.
    * @returns {String}
    */
   static getInstanceCollectionName (collectionName, instanceId) {

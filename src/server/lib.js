@@ -5,27 +5,73 @@
 class InfiniLoadServer extends InfiniLoadBase {
 
   /**
+   * Return dynamic selector object based on user info and client parameters.
+   * @callback InfiniLoadServer~SelectorFactory
+   * @param {String} userId
+   *        The ID of the current user.
+   * @param {Object} params
+   *        Parameters set by client.
+   * @returns {Object}
+   */
+
+  /**
+   * Return dynamic sort object based on user info and client parameters.
+   * @callback InfiniLoadServer~SortFactory
+   * @param {String} userId
+   *        The ID of the current user.
+   * @param {Object} params
+   *        Parameters set by client.
+   * @returns {Object}
+   */
+
+  /**
+   * Return dynamic fields object based on user info and client parameters.
+   * @callback InfiniLoadServer~FieldsFactory
+   * @param {String} userId
+   *        The ID of the current user.
+   * @param {Object} params
+   *        Parameters set by client.
+   * @returns {Object}
+   */
+
+  /**
+   * Return affiliated cursors.
+   * @callback InfiniLoadServer~Affiliation
+   * @param {Mongo.Cursor} cursor
+   * @returns {Mongo.Cursor|Array.<Mongo.Cursor>}
+   */
+
+  /**
    * Configurable options for server side.
-   * @typedef {Object} ServerOptions
-   * @extends CommonOptions
-   * @property {Object|Function} [selector={}]
-   * @property {Object|Function} [sort={}]
-   * @property {Object|Function} [fields={}]
-   * @property {String|{name: String, type: String}} [timeField]
-   * @property {Function} [affiliation]
-   * @property {Number} [slowdown=0] How much time to wait before publishing data.
+   * @typedef {Object} InfiniLoadServer~ServerOptions
+   * @extends InfiniLoadBase~CommonOptions
+   * @property {Object|InfiniLoadServer~SelectorFactory} [selector={}]
+   *           The selector object or a factory function for generating the selector object.
+   * @property {Object|InfiniLoadServer~SortFactory} [sort={}]
+   *           The sort object or a factory function for generating the sort object.
+   * @property {Object|InfiniLoadServer~FieldsFactory} [fields={}]
+   *           The fields object or a factory function for generating the fields object.
+   * @property {String|{name: String, type: String}} [timeField={name: "createTime", type: "number"}]
+   *           The name and type of the field used for temporal sorting.
+   *           If a `string` is provided, it is considered the name of the field and type is the default value `"number"`.
+   * @property {InfiniLoadServer~Affiliation} [affiliation=null]
+   *           Use this function to return more cursors to be published alongside.
+   * @property {Number} [slowdown=0]
+   *           How much time in milliseconds to wait before publishing data.
    */
 
   /**
    * Creates a new server side InfiniLoad instance for a Mongo.Collection.
-   * @param {Mongo.Collection} collection The collection this InfiniLoad instance belongs to.
-   * @param {ServerOptions} [options] Optional configurations.
+   * @param {Mongo.Collection} collection
+   *        The collection this InfiniLoad instance belongs to.
+   * @param {InfiniLoadServer~ServerOptions} [options]
+   *        Optional configurations.
    */
   constructor (collection, options = {}) {
     super(collection, options);
     const me = this;
 
-    /**
+    /*
      * Launch sequence:
      *   - Check parameters.
      *   - Initialize variables.
@@ -42,6 +88,12 @@ class InfiniLoadServer extends InfiniLoadBase {
                       : options.timeField || {};
     const timeFieldName = timeField.name || 'createTime';
     const timeFieldType = timeField.type || 'number';
+    /*
+     * Issues with supporting affiliation:
+     *   RootCollectionCursor ==(affiliation)==> AffiliatedCollectionCursors
+     *   Does this process auto-rerun?
+     *   How to update AffiliatedCollectionCursors when RootCollectionCursor changes?
+     */
     const affiliation = options.affiliation || null;
     const slowdown = options.slowdown || 0;
 
@@ -69,7 +121,9 @@ class InfiniLoadServer extends InfiniLoadBase {
       const lastLoadTime = options.lastLoadTime || now;
 
       const findSelector = getFindSelector(this.userId, serverArgs);
+      //! Current only support Object style sort options. Need to support array style.
       const findSort = getFindSort(this.userId, serverArgs);
+      // Enforce sort by time field.
       findSort[timeFieldName] = -1;
       const findFields = getFindFields(this.userId, serverArgs);
 
@@ -146,6 +200,7 @@ class InfiniLoadServer extends InfiniLoadBase {
           me._log('changed', oldDoc._id, newDoc, oldDoc);
           // Assume the time field never changes so we don't need to worry about documents jumping around in the list.
 
+          //! Need to handle the time field changes in the future.
           if (loadedDocuments.has(oldDoc._id)) {
             me._log('updating to client', oldDoc._id);
             loadedDocuments.set(oldDoc._id, newDoc);
