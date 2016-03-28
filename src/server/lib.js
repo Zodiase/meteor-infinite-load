@@ -83,7 +83,7 @@ class InfiniLoadServer extends InfiniLoadBase {
           totalDocCount = 0,
           newDocCount = 0,
           oldDocCount = 0,
-          loadedDocument = new Map(),
+          loadedDocuments = new Map(),
           initializing = true;
 
       const GenerateStatsDocument = () => {
@@ -93,7 +93,7 @@ class InfiniLoadServer extends InfiniLoadBase {
           totalDocCount,
           newDocCount,
           oldDocCount,
-          loadedDocCount: loadedDocument.size,
+          loadedDocCount: loadedDocuments.size,
           selector: findSelector,
           sort: findSort,
           fields: findFields,
@@ -131,9 +131,9 @@ class InfiniLoadServer extends InfiniLoadBase {
             newDocCount++;
           } else {
             oldDocCount++;
-            if (loadedDocument.size < findLimit) {
+            if (loadedDocuments.size < findLimit) {
               me._log('sending to client', doc._id);
-              loadedDocument.set(doc._id, doc);
+              loadedDocuments.set(doc._id, doc);
               this.added(me.collectionName, doc._id, doc);
             }
           }
@@ -146,9 +146,9 @@ class InfiniLoadServer extends InfiniLoadBase {
           me._log('changed', oldDoc._id, newDoc, oldDoc);
           // Assume the time field never changes so we don't need to worry about documents jumping around in the list.
 
-          if (loadedDocument.has(oldDoc._id)) {
+          if (loadedDocuments.has(oldDoc._id)) {
             me._log('updating to client', oldDoc._id);
-            loadedDocument.set(oldDoc._id, newDoc);
+            loadedDocuments.set(oldDoc._id, newDoc);
             this.changed(me.collectionName, oldDoc._id, newDoc);
           }
         },
@@ -166,9 +166,9 @@ class InfiniLoadServer extends InfiniLoadBase {
             newDocCount--;
           } else {
             oldDocCount--;
-            if (loadedDocument.has(doc._id)) {
+            if (loadedDocuments.has(doc._id)) {
               me._log('removing from client', doc._id);
-              loadedDocument.delete(doc._id);
+              loadedDocuments.delete(doc._id);
               this.removed(me.collectionName, doc._id);
             }
           }
