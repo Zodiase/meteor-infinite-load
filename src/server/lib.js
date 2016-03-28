@@ -117,7 +117,7 @@ class InfiniLoadServer extends InfiniLoadBase {
           totalDocCount++;
 
           // Time field value must be able to be converted to a number.
-          let timeValue = Number(doc[timeFieldName]);
+          let timeValue = self._getDocumentTimeValue(doc, timeFieldName, timeFieldType);
 
           // See if this doc is the latest on server.
           if (timeValue > latestDocTime) {
@@ -159,7 +159,7 @@ class InfiniLoadServer extends InfiniLoadBase {
           totalDocCount--;
 
           // Time field value must be able to be converted to a number.
-          let timeValue = Number(doc[timeFieldName]);
+          let timeValue = self._getDocumentTimeValue(doc, timeFieldName, timeFieldType);
 
           // If this doc is new to the client, update new document count. Otherwise update old document count.
           if (timeValue > lastLoadTime) {
@@ -193,6 +193,18 @@ class InfiniLoadServer extends InfiniLoadBase {
   /**
    * Static methods.
    */
+
+  /**
+   * Helper function for getting the time value from a document.
+   * @private
+   * @param {Object} doc
+   * @param {String} fieldName
+   * @param {String} fieldType
+   * @returns {Number}
+   */
+  static _getDocumentTimeValue (doc, fieldName, fieldType) {
+    return Number(doc[fieldName]);
+  }
 
   /**
    * Getters and Setters.
