@@ -46,6 +46,12 @@ if (Meteor.isServer) {
       options.verbose = true;
       saveInstance(options.id, new lib(dataCollection, options));
       return options.id;
+    },
+    'insert': (doc) => {
+      check(doc, Object);
+      delete doc._id;
+      const docId = dataCollection.insert(doc);
+      return docId;
     }
   });
 }
@@ -96,13 +102,19 @@ Tinytest.add('Basics - Multiple Identical Instantiations throw', function (test)
 });
 
 if (Meteor.isClient) {
+  //! For debugging only.
+  window.Meteor = Meteor;
+  
   Tinytest.addAsync('Basics - Client side methods', function (test, next) {
     const onLibReady = (error, result) => {
       if (error) {
         throw error;
       }
       const id = result;
-      const inst = new lib(dataCollection, {id});
+      const inst = new lib(dataCollection, {
+        id,
+        verbose: true
+      });
 
       const methodNames = [
         'find',
@@ -130,21 +142,48 @@ if (Meteor.isClient) {
     Meteor.call('newlib', {}, onLibReady);
   });
 
-  Tinytest.add('APIs - State before starting', function (test) {
-    const id = newInstanceId();
-    const inst = new lib(dataCollection, {
-      id,
-      verbose: true
-    });
-    saveInstance(id, inst);
-    
-    test.equal(inst.find({}).count(), 0);
-    test.equal(typeof inst.findOne({}), 'undefined');
-    test.equal(inst.count(), 0);
-    test.equal(inst.countMore(), 0);
-    test.equal(inst.countNew(), 0);
-    test.equal(inst.countTotal(), 0);
-    test.equal(inst.hasMore(), false);
-    test.equal(inst.hasNew(), false);
+  Tinytest.addAsync('APIs - State before starting', function (test, next) {
+    const onLibReady = (error, result) => {
+      if (error) {
+        throw error;
+      }
+      const id = result;
+      const inst = new lib(dataCollection, {
+        id,
+        verbose: true
+      });
+
+      test.equal(inst.find({}).count(), 0);
+      test.equal(typeof inst.findOne({}), 'undefined');
+      test.equal(inst.count(), 0);
+      test.equal(inst.countMore(), 0);
+      test.equal(inst.countNew(), 0);
+      test.equal(inst.countTotal(), 0);
+      test.equal(inst.hasMore(), false);
+      test.equal(inst.hasNew(), false);
+      next();
+    };
+    Meteor.call('newlib', {}, onLibReady);
   });
+
+  Tinytest.addAsync('APIs - Subscribe', function (test, next) {
+    const onLibReady = (error, result) => {
+      if (error) {
+        throw error;
+      }
+      const id = result;
+      const inst = new lib(dataCollection, {
+        id,
+        verbose: true
+      });
+
+      //! Somehow start immediately after instantiation does not work.
+      //inst.start();
+      window.inst = inst;
+      test.ok();
+      next();
+    };
+    Meteor.call('newlib', {}, onLibReady);
+  });
+
 }

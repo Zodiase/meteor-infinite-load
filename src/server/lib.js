@@ -107,14 +107,36 @@ class InfiniLoadServer extends InfiniLoadBase {
                           ? fields
                           : self._CONST.OP_RETURN_THIS.bind(fields);
 
-    me._log('publish', me.collectionName);
+    /**
+     * @typedef {Object} InfiniLoadServer~SubscribeOptions
+     * @property {String} requestId
+     *           A unique identifier for each subscription request.
+     * @property {Object} args
+     *           Arguments passed to find option factories.
+     * @property {Number} limit
+     *           How many documents to return.
+     * @property {Number} lastLoadTime
+     *           Cut-off time between new and old documents.
+     *           This is tracked by the client so other parameters can be changed without moving the cut-off line.
+     */
+
     Meteor.publish(me.collectionName, function (options = {}) {
       check(options, self._CONST.PUBLISH_OPTIONS_PATTERN);
+
+      const subscriptionId = this._subscriptionId;
+
+      me._log('subscribe', subscriptionId, options);
 
       // `Date.now()` is faster than `new Date().getTime()`.
       const now = Date.now();
 
       const requestId = options.requestId;
+
+      if (!requestId) {
+        this.ready();
+        return;
+      }
+
       const serverArgs = options.args || {};
       const findLimit = options.limit || 0;
       // If `lastLoadTime` is not specified, it is `now`.
@@ -141,8 +163,37 @@ class InfiniLoadServer extends InfiniLoadBase {
           initializing = true;
 
       const GenerateStatsDocument = () => {
+        /**
+         * @typedef {Object} InfiniLoadServer~StatsDocument
+         * @property {String} subscriptionId
+         *           The ID of the subscription.
+         * @property {String} requestId
+         *           The unique identifier for the subscription request.
+         * @property {Number} lastLoadTime
+         *           Cut-off time between new and old documents.
+         * @property {Number} latestDocTime
+         *           The time field value of the latest document.
+         * @property {Number} totalDocCount
+         *           How many documents in the collection that match the find options.
+         * @property {Number} newDocCount
+         *           How many documents are above than the cut-off line.
+         * @property {Number} oldDocCount
+         *           How many documents are below than the cut-off line.
+         * @property {Number} loadedDocCount
+         *           How many documents are sent to the client. This value is never larger than the find limit.
+         * @property {Object} selector
+         *           The final selector object used in find.
+         * @property {Object} sort
+         *           The final sort object used in find.
+         * @property {Object} fields
+         *           The final fields object used in find.
+         * @property {Number} limit
+         *           The find limit.
+         */
         return {
+          subscriptionId,
           requestId,
+          lastLoadTime,
           latestDocTime,
           totalDocCount,
           newDocCount,
@@ -243,6 +294,7 @@ class InfiniLoadServer extends InfiniLoadBase {
         observer.stop();
       });
     });
+    me._log('published');
   }
 
   /**
