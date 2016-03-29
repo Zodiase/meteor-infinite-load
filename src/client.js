@@ -73,7 +73,7 @@ class InfiniLoadClient extends InfiniLoadBase {
      * Indicate whether this instance is started.
      * @type {Boolean}
      */
-    me._runtime.started = false;
+    me._runtime.running = false;
     /**
      * Store the current request ID.
      * Reset on start.
@@ -133,9 +133,12 @@ class InfiniLoadClient extends InfiniLoadBase {
     /**
      * Store callback functions for each event.
      * @private
-     * @type {Object.<String, Function>}
+     * @type {Object.<String, Array.<Function>>}
      */
     me._eventHandlers = {};
+    for (let eventName of self._CONST.SUPPORTED_EVENTS) {
+      me._eventHandlers[eventName] = [];
+    }
     /**
      * The dedicated collection storing data for this InfiniLoad instance, including the stats document.
      * @private
@@ -182,7 +185,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @param {InfiniLoadClient} instance
    * @param {String} eventName
    *        Name of the event.
-   * @param {Object} context
+   * @param {*} context
    *        Context for the callbacks.
    * @param {Array.<*>} args
    *        The arguments to be passed to callbacks.
@@ -190,8 +193,9 @@ class InfiniLoadClient extends InfiniLoadBase {
   static _callEventHandlers (instance, eventName, context, args) {
     check(instance, self);
     check(eventName, String);
-    check(context, Object);
     check(args, Array);
+
+    instance._log('trigger event handlers', eventName);
 
     // Shortcut.
     const eList = self._CONST.SUPPORTED_EVENTS;
@@ -199,7 +203,7 @@ class InfiniLoadClient extends InfiniLoadBase {
     if (eList.indexOf(eventName) === -1) {
       return;
     }
-    //else
+
     for (let handler of instance._eventHandlers[eventName]) {
       handler.apply(context, args);
     }
@@ -291,10 +295,17 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @private
    * @param {InfiniLoadClient} instance
    * @param {String} requestId
+   * @param {*} context
+   *        Context for the callbacks.
+   * @param {Array.<*>} args
+   *        The arguments to be passed to callbacks.
    */
-  static _triggerRequestReadyCallbacks (instance, requestId) {
+  static _triggerRequestReadyCallbacks (instance, requestId, context, args) {
     check(instance, self);
     check(requestId, String);
+    check(args, Array);
+
+    instance._log('trigger request ready callbacks', requestId);
 
     const requestDoc = instance._requestDocuments.findOne(requestId);
     if (!requestDoc) {
@@ -303,7 +314,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
     const callbacks = requestDoc.onReady || [];
     for (let cb of callbacks) {
-      cb();
+      cb.apply(context, args);
     }
   }
 
@@ -398,10 +409,13 @@ class InfiniLoadClient extends InfiniLoadBase {
    * Use the latest parameters to start a new subscription.
    * @private
    * @param {InfiniLoadClient} instance
+   * @param {Boolean} [quit=false]
+   *        Set to `true` to subscribe to an empty data source to clean up the collection.
    * @returns {InfiniLoadClient~ActionHandle}
    */
-  static _newSubscription (instance) {
+  static _newSubscription (instance, quit = false) {
     check(instance, self);
+    check(quit, Boolean);
 
     const requestId = instance._runtime.requestId = self._newRequest(instance);
 
@@ -416,12 +430,15 @@ class InfiniLoadClient extends InfiniLoadBase {
      * @property {Number} lastLoadTime
      *           Cut-off time between new and old documents.
      *           This is tracked by the client so other parameters can be changed without moving the cut-off line.
+     * @property {Boolean} quit
+     *           Set to `true` to ask server to clean up subscription.
      */
     const parameters = {
       requestId,
       args: instance._serverArgs,
       limit: instance._runtime.findLimit,
-      lastLoadTime: instance._runtime.lastLoadTime
+      lastLoadTime: instance._runtime.lastLoadTime,
+      quit
     };
     instance._log('new request', requestId, parameters);
     self._saveRequestParameters(instance, requestId, parameters);
@@ -450,25 +467,36 @@ class InfiniLoadClient extends InfiniLoadBase {
 
     this._log('_statsChangedAutorun', {stats});
 
-    // stats is undefined when the connection is not ready.
-    if (!stats) {
+    // Both `stats` and `lastStats` are undefined when the connection is not ready yet.
+    if (!stats && !this._runtime.stopping) {
       return;
     }
 
-    // Check if lastLoadTime is changed (likely by server).
-    if (stats.lastLoadTime > this._runtime.lastLoadTime) {
-      this._runtime.lastLoadTime = stats.lastLoadTime;
-    }
+    if (stats) {
+      // Stats is updated.
 
-    // Check if requestId is changed.
-    if (stats.requestId !== this._runtime.lastReceivedRequestId) {
-      this._runtime.lastReceivedRequestId = stats.requestId;
+      // Check if lastLoadTime is changed (likely by server).
+      if (stats.lastLoadTime > this._runtime.lastLoadTime) {
+        this._runtime.lastLoadTime = stats.lastLoadTime;
+      }
 
-      self._markRequestReady(this, stats.requestId);
-      this._log('request ready', stats.requestId, stats);
+      // Check if requestId is changed.
+      if (stats.requestId !== this._runtime.lastReceivedRequestId) {
+        this._runtime.lastReceivedRequestId = stats.requestId;
+
+        self._markRequestReady(this, stats.requestId);
+        this._log('request ready', stats.requestId, stats);
+
+        // Trigger callbacks outside of the autorun to avoid issues with Tracker.
+        Meteor._setImmediate(self._triggerRequestReadyCallbacks.bind(self, this, stats.requestId, this, [this.originalCollection]));
+        Meteor._setImmediate(self._callEventHandlers.bind(self, this, 'ready', this, [this.originalCollection]));
+      }
+    } else {
+      // Stats is deleted and we are stopping.
 
       // Trigger callbacks outside of the autorun to avoid issues with Tracker.
-      Meteor._setImmediate(self._triggerRequestReadyCallbacks.bind(self, this, stats.requestId));
+      Meteor._setImmediate(self._triggerRequestReadyCallbacks.bind(self, this, this._runtime.requestId, this, [this.originalCollection]));
+      Meteor._setImmediate(self._callEventHandlers.bind(self, this, 'stop', this, [this.originalCollection]));
     }
   }
 
@@ -500,7 +528,16 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @returns {Number}
    */
   get limit () {
-    return this.stats.limit;
+    const stats = this.stats;
+    return (!stats) ? 0 : stats.limit;
+  }
+
+  /**
+   * Check if we are started. That is, we are running and no other flags are present.
+   * @returns {Boolean}
+   */
+  get started () {
+    return this._runtime.running && !this._runtime.starting && !this._runtime.stopping;
   }
 
   /*****************************************************************************
@@ -606,7 +643,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @returns {InfiniLoadClient~ActionHandle}
    */
   loadNew () {
-    if (!this._runtime.started) {
+    if (!this.started) {
       throw new Error('InfiniLoadClient ' + this.collectionName + ' has not started. Can not call `.loadNew()`.');
     }
 
@@ -702,13 +739,16 @@ class InfiniLoadClient extends InfiniLoadBase {
   start (template) {
     check(template, Match.Optional(Blaze.TemplateInstance));
 
-    if (this._runtime.started) {
-      throw new Error('InfiniLoadClient ' + this.collectionName + ' already started.');
+    if (this._runtime.running) {
+      throw new Error('InfiniLoadClient ' + this.collectionName + ' is already running.');
     }
 
     this._log('starting...');
 
-    this._runtime.started = true;
+    this._runtime.running = true;
+
+    // Set a flag to indicate we are starting.
+    this._runtime.starting = true;
 
     // Initialize variables.
     this._runtime.requestId = '';
@@ -732,9 +772,10 @@ class InfiniLoadClient extends InfiniLoadBase {
     this._runtime.computations['checkRequestReady'] = this._autorun(self._statsChangedAutorun.bind(this));
 
     const handle = self._newSubscription(this);
-
-    this._log('started');
-
+    handle.ready(() => {
+      delete this._runtime.starting;
+      this._log('started');
+    });
     return handle;
   }
 
@@ -745,7 +786,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @returns {InfiniLoadClient~ActionHandle}
    */
   sync () {
-    if (!this._runtime.started) {
+    if (!this.started) {
       throw new Error('InfiniLoadClient ' + this.collectionName + ' has not started. Can not call `.sync()`.');
     }
 
@@ -758,40 +799,51 @@ class InfiniLoadClient extends InfiniLoadBase {
    * Stop all the automations.
    */
   stop () {
-    if (!this._runtime.started) {
-      return;
+    if (!this._runtime.running) {
+      throw new Error('InfiniLoadClient ' + this.collectionName + ' not running.');
+    } else if (this._runtime.starting) {
+      throw new Error('InfiniLoadClient ' + this.collectionName + ' can not be stopped while starting.');
     }
 
     this._log('stopping...');
 
-    // Stop all computations.
-    for (let name of Object.keys(this._runtime.computations)) {
-      let comp = this._runtime.computations[name];
-      if (!comp.stopped) {
-        comp.stop();
+    // Set a flag to indicate we are stopping.
+    this._runtime.stopping = true;
+
+    const handle = self._newSubscription(this, true);
+    handle.ready(() => {
+      // Stop all computations.
+      for (let name of Object.keys(this._runtime.computations)) {
+        let comp = this._runtime.computations[name];
+        if (!comp.stopped) {
+          comp.stop();
+        }
       }
-    }
-    this._runtime.computations = {};
-    // Stop all subscriptions.
-    if (this._runtime.subscription) {
-      // It's OK to call `stop` multiple times.
-      this._runtime.subscription.stop();
-      this._runtime.subscription = null;
-    }
+      this._runtime.computations = {};
+      // Stop all subscriptions.
+      if (this._runtime.subscription) {
+        // It's OK to call `stop` multiple times.
+        this._runtime.subscription.stop();
+        this._runtime.subscription = null;
+      }
 
-    // Reset variables.
-    delete this._autorun;
-    delete this._subscribe;
+      // Reset variables.
+      delete this._autorun;
+      delete this._subscribe;
 
-    this._runtime.requestId = '';
-    this._runtime.lastReceivedRequestId = '';
-    this._runtime.findLimit = 0;
-    this._runtime.lastLoadTime = 0;
-    this._requestDocuments.remove({});
+      this._runtime.requestId = '';
+      this._runtime.lastReceivedRequestId = '';
+      this._runtime.findLimit = 0;
+      this._runtime.lastLoadTime = 0;
+      this._requestDocuments.remove({});
 
-    this._runtime.started = false;
+      this._runtime.running = false;
 
-    this._log('stopped');
+      delete this._runtime.stopping;
+      this._log('stopped');
+    });
+
+    return handle;
   }
 
 }
@@ -810,7 +862,8 @@ InfiniLoadClient._CONST = _.extend({}, InfiniLoadBase._CONST, /** @lends InfiniL
   },
   SUPPORTED_EVENTS: [
     'ready',
-    'update'
+    'update',
+    'stop'
   ],
   CONSTRUCT_OPTIONS_PATTERN: Match.ObjectIncluding({
     'initialLimit': Match.Optional(Number),

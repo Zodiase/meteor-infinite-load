@@ -301,9 +301,7 @@ if (Meteor.isClient) {
           test.equal(inst.hasMore(), (globalTestItems.length + newItems.length) > inst.limit);
           test.equal(inst.hasNew(), false);
 
-          inst.stop();
-
-          next();
+          inst.stop().ready(next);
         });
       });
     };
@@ -322,4 +320,22 @@ if (Meteor.isClient) {
     });
   });
 
+  Tinytest.addAsync('APIs - subscribe, sync and test global ready events', function (test, next) {
+    const inst = globalInst;
+
+    let readyCount = 0;
+    inst.on('ready', () => {
+      readyCount += 1;
+    });
+
+    inst.start().ready(() => {
+      test.equal(readyCount, 0);
+
+      inst.sync().ready(() => {
+        test.equal(readyCount, 1);
+
+        inst.stop().ready(next);
+      });
+    });
+  });
 }

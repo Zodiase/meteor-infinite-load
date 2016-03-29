@@ -137,7 +137,7 @@ class InfiniLoadServer extends InfiniLoadBase {
 
       const requestId = options.requestId;
 
-      if (!requestId) {
+      if (options.quit || !requestId) {
         connection.ready();
         return;
       }
