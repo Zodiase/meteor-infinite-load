@@ -54,11 +54,21 @@ if (Meteor.isServer) {
       console.log('new lib ready', options.id);
       return options.id;
     },
-    'insert' (doc) {
-      check(doc, Object);
-      delete doc._id;
-      const docId = dataCollection.insert(doc);
-      return docId;
+    'insert' (docs) {
+      if (!Array.isArray(docs)) {
+        docs = [docs];
+      }
+      check(docs, [Object]);
+
+      const docIds = new Array(docs.length);
+
+      for (let i = 0; i < docs.length; ++i) {
+        delete docs[i]._id;
+        docs[i].createTime = Date.now();
+        docIds[i] = dataCollection.insert(docs[i]);
+      }
+
+      return docIds;
     }
   });
 }
@@ -112,13 +122,18 @@ if (Meteor.isClient) {
   //! For debugging only.
   window.Meteor = Meteor;
 
+  const initialLoadLimit = 3;
+  const loadIncrement = 5;
+
   let globalInst = null;
+  let globalTestItems = [];
 
   Tinytest.addAsync('Basics - client side methods', function (test, next) {
     const onLibReady = (error, result) => {
       if (error) {
         throw error;
       }
+
       const id = result;
       const inst = new lib(dataCollection, {
         id,
@@ -146,6 +161,7 @@ if (Meteor.isClient) {
       for (let key of methodNames) {
         test.equal(typeof inst[key], 'function');
       }
+
       next();
     };
     Meteor.call('newlib', {}, onLibReady);
@@ -156,6 +172,7 @@ if (Meteor.isClient) {
       if (error) {
         throw error;
       }
+
       const id = result;
       const inst = new lib(dataCollection, {
         id,
@@ -171,29 +188,61 @@ if (Meteor.isClient) {
       for (let key of Object.keys(properties)) {
         test.equal(Match.test(inst[key], properties[key]), true);
       }
+
       next();
     };
     Meteor.call('newlib', {}, onLibReady);
   });
 
   Tinytest.addAsync('APIs - initialize', function (test, next) {
+
+    const libOptions = {
+      initialLimit: initialLoadLimit,
+      limitIncrement: loadIncrement
+    };
+
     const onLibReady = (error, result) => {
       if (error) {
         throw error;
       }
+
       const id = result;
       globalInst = new lib(dataCollection, {
         id,
-        verbose: true
+        verbose: true,
+        ...libOptions
       });
 
       //!
       window.inst = globalInst;
 
       test.ok();
+
       next();
     };
-    Meteor.call('newlib', {}, onLibReady);
+    Meteor.call('newlib', libOptions, onLibReady);
+  });
+
+  Tinytest.addAsync('APIs - prepare data', function (test, next) {
+    const items = globalTestItems = [];
+
+    for (let i = 0; i < (initialLoadLimit + loadIncrement * 17); ++i) {
+      items.push({
+        secret: Meteor.uuid()
+      });
+    }
+
+    const onInsertReady = (error, result) => {
+      if (error) {
+        throw error;
+      }
+
+      const itemIds = result;
+      test.equal(itemIds.length, items.length);
+
+      next();
+    };
+    Meteor.call('insert', items, onInsertReady);
   });
 
   Tinytest.add('APIs - state before starting', function (test) {
@@ -209,12 +258,18 @@ if (Meteor.isClient) {
     test.equal(inst.hasNew(), false);
   });
 
-  Tinytest.addAsync('APIs - subscribe', function (test, next) {
+  Tinytest.addAsync('APIs - subscribe and state', function (test, next) {
     const inst = globalInst;
     inst.start().ready(() => {
-//       inst.stop();
-      test.ok();
-//       next();
+      test.equal(inst.find({}).count(), inst.limit);
+      test.equal(inst.count(), inst.limit);
+      test.equal(inst.countMore(), inst.countTotal() - inst.count());
+      test.equal(inst.countNew(), 0);
+      test.equal(inst.countTotal(), globalTestItems.length);
+      test.equal(inst.hasMore(), globalTestItems.length > inst.limit);
+      test.equal(inst.hasNew(), false);
+      inst.stop();
+      next();
     });
   });
 
