@@ -278,6 +278,7 @@ if (Meteor.isClient) {
       const itemIds = result;
       test.equal(itemIds.length, newItems.length);
 
+      // Test `.sync()` and `.countNew()`.
       inst.sync().ready(() => {
         test.equal(inst.find({}).count(), inst.limit);
         test.equal(inst.count(), inst.limit);
@@ -289,6 +290,7 @@ if (Meteor.isClient) {
 
         const limitBeforeLoadNew = inst.limit;
 
+        // Test `.loadNew()`.
         inst.loadNew().ready(() => {
           test.equal(inst.limit, limitBeforeLoadNew + newItems.length);
           test.equal(inst.find({}).count(), inst.limit);
@@ -306,6 +308,7 @@ if (Meteor.isClient) {
       });
     };
 
+    // Test `.start()` and `.ready()`.
     inst.start().ready(() => {
       test.equal(inst.find({}).count(), inst.limit);
       test.equal(inst.count(), inst.limit);
