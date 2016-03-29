@@ -3,6 +3,7 @@ import { Mongo } from 'meteor/mongo';
 import { Blaze } from 'meteor/blaze';
 import { Tracker } from 'meteor/tracker';
 import { check, Match } from 'meteor/check';
+import { ReactiveVar } from 'meteor/reactive-var';
 import { InfiniLoadBase } from './base.js';
 
 /**
@@ -263,17 +264,19 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Helper function for adding a callback function to be called when the request is ready.
+   * Never use directly and always use `.bind()` to set `this`.
    * @private
-   * @param {InfiniLoadClient} instance
    * @param {String} requestId
    * @param {Function} callback
    */
-  static _registerRequestReadyCallback (instance, requestId, callback) {
-    check(instance, self);
+  static _registerRequestReadyCallback (requestId, callback) {
+    check(this, self);
     check(requestId, String);
     check(callback, Function);
 
-    instance._requestDocuments.update(requestId, {
+    this._log('register request ready callback', requestId);
+
+    this._requestDocuments.update(requestId, {
       $push: {
         onReady: callback
       }
@@ -384,7 +387,7 @@ class InfiniLoadClient extends InfiniLoadBase {
     check(requestId, String);
 
     return {
-      ready: self._registerRequestReadyCallback.bind(self, instance, requestId)
+      ready: self._registerRequestReadyCallback.bind(instance, requestId)
     };
   }
 
@@ -420,6 +423,11 @@ class InfiniLoadClient extends InfiniLoadBase {
     instance._log('new request', requestId, parameters);
     self._saveRequestParameters(instance, requestId, parameters);
     self._markRequestStart(instance, requestId);
+
+    if (instance._runtime.subscription) {
+      instance._runtime.subscription.stop();
+      instance._runtime.subscription = null;
+    }
     instance._runtime.subscription = instance._subscribe(instance.collectionName, parameters, self._onSubscriptionReady.bind(instance, requestId));
 
     return self._getActionHandle(instance, requestId);
@@ -436,6 +444,9 @@ class InfiniLoadClient extends InfiniLoadBase {
     check(this, self);
 
     const stats = this.stats;
+
+    this._log('_statsChangedAutorun', {stats});
+
     // stats is undefined when the connection is not ready.
     if (!stats) {
       return;
@@ -697,6 +708,22 @@ class InfiniLoadClient extends InfiniLoadBase {
     this._log('started');
 
     return handle;
+  }
+
+  /**
+   * Force a new subscription with the current settings.
+   * This is used to wait for previous server updates to propagate to client.
+   * If this called before starting, `null` will be returned.
+   * @returns {InfiniLoadClient~ActionHandle|null}
+   */
+  sync () {
+    if (!this._runtime.started) {
+      return null;
+    }
+
+    this._log('sync');
+
+    return self._newSubscription(this);
   }
 
   /**

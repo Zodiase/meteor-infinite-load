@@ -258,18 +258,51 @@ if (Meteor.isClient) {
     test.equal(inst.hasNew(), false);
   });
 
-  Tinytest.addAsync('APIs - subscribe and state', function (test, next) {
+  Tinytest.addAsync('APIs - subscribe, add new and state', function (test, next) {
     const inst = globalInst;
+
+    const newItems = [];
+
+    // Use loadIncrement for new item count.
+    for (let i = 0; i < loadIncrement; ++i) {
+      newItems.push({
+        secret: Meteor.uuid()
+      });
+    }
+
+    const onInsertReady = (error, result) => {
+      if (error) {
+        throw error;
+      }
+
+      const itemIds = result;
+      test.equal(itemIds.length, newItems.length);
+
+      inst.sync().ready(() => {
+        test.equal(inst.find({}).count(), inst.limit);
+        test.equal(inst.count(), inst.limit);
+        test.equal(inst.countMore(), inst.countTotal() - inst.countNew() - inst.count());
+        test.equal(inst.countNew(), newItems.length);
+        test.equal(inst.countTotal(), globalTestItems.length + newItems.length);
+        test.equal(inst.hasMore(), globalTestItems.length > inst.limit);
+        test.equal(inst.hasNew(), newItems.length > 0);
+
+        inst.stop();
+
+        next();
+      });
+    };
+
     inst.start().ready(() => {
       test.equal(inst.find({}).count(), inst.limit);
       test.equal(inst.count(), inst.limit);
-      test.equal(inst.countMore(), inst.countTotal() - inst.count());
+      test.equal(inst.countMore(), inst.countTotal() - inst.countNew() - inst.count());
       test.equal(inst.countNew(), 0);
       test.equal(inst.countTotal(), globalTestItems.length);
       test.equal(inst.hasMore(), globalTestItems.length > inst.limit);
       test.equal(inst.hasNew(), false);
-      inst.stop();
-      next();
+
+      Meteor.call('insert', newItems, onInsertReady);
     });
   });
 
