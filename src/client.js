@@ -15,6 +15,10 @@ class InfiniLoadClient extends InfiniLoadBase {
    * Configurable options for client side.
    * @typedef {Object} InfiniLoadClient~ClientOptions
    * @extends InfiniLoadBase~CommonOptions
+   * @property {Number} [initialLimit=10]
+   *           The max number of documents to load on start.
+   * @property {Number} [limitIncrement=initialLimit]
+   *           The number of additional documents to load on `.loadMore()`.
    */
 
   /**
@@ -379,6 +383,7 @@ class InfiniLoadClient extends InfiniLoadBase {
       createdAt: Date.now(),
       params: null,
       startAt: 0,
+      confirmedAt: 0,
       readyAt: 0,
       onReady: []
     };
@@ -469,6 +474,21 @@ class InfiniLoadClient extends InfiniLoadBase {
   }
 
   /**
+   * Helper function for marking the confirm time of a request in its request document.
+   * @private
+   * @param {String} requestId
+   */
+  _markRequestConfirmed (requestId) {
+    check(requestId, String);
+
+    this._requestDocuments.update(requestId, {
+      $set: {
+        confirmedAt: Date.now()
+      }
+    });
+  }
+
+  /**
    * Helper function for marking the ready time of a request in its request document.
    * @private
    * @param {String} requestId
@@ -488,8 +508,8 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @private
    */
   _onSubscriptionReady (requestId) {
-    this._log('subscription ready');
-    this._markRequestReady(requestId);
+    this._log('request confirmed', requestId);
+    this._markRequestConfirmed(requestId);
   }
 
   /**
@@ -536,7 +556,7 @@ class InfiniLoadClient extends InfiniLoadBase {
       limit: this._findLimit,
       lastLoadTime: this._lastLoadTime
     };
-    this._log('subscribe', parameters);
+    this._log('new request', requestId, parameters);
     this._saveRequestParameters(requestId, parameters);
     this._markRequestStart(requestId);
     this._subscription = this._subscribe(this.collectionName, parameters, this._onSubscriptionReady.bind(this, requestId));
@@ -561,6 +581,9 @@ class InfiniLoadClient extends InfiniLoadBase {
     }
 
     this._lastReceivedRequestId = requestId;
+
+    this._markRequestReady(requestId);
+    this._log('request ready', requestId, stats);
 
     // Trigger callbacks outside of the autorun to avoid issues with Tracker.
     Meteor._setImmediate(this._triggerRequestReadyCallbacks.bind(this, requestId));
