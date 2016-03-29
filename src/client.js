@@ -268,6 +268,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @private
    * @param {String} requestId
    * @param {Function} callback
+   * @returns {InfiniLoadClient~ActionHandle}
    */
   static _registerRequestReadyCallback (requestId, callback) {
     check(this, self);
@@ -281,6 +282,8 @@ class InfiniLoadClient extends InfiniLoadBase {
         onReady: callback
       }
     });
+
+    return self._getActionHandle(this, requestId);
   }
 
   /**
