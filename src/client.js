@@ -88,6 +88,7 @@ class InfiniLoadClient extends InfiniLoadBase {
     me._runtime.lastReceivedRequestId = '';
     /**
      * Represent how many documents are requested from server.
+     * This value could be changed by `.loadMore()` or `.loadNew()`.
      * Reset on start.
      * @type {Number}
      */
@@ -104,7 +105,7 @@ class InfiniLoadClient extends InfiniLoadBase {
      * Store computations.
      * @type {Object.<String, Object>}
      */
-    me._runtime.computations = {};
+    me._runtime.computations = null;
     /**
      * Store the active subscription.
      * @type {Object}
@@ -425,31 +426,36 @@ class InfiniLoadClient extends InfiniLoadBase {
   }
 
   /**
-   * Autorun for checking what requests are ready.
-   * It keeps fetching the stats document, from which it gets the latest request ID
-   *     and triggers its callbacks.
+   * Autorun when stats are changed.
+   * It checks what requests are ready by fetching the stats document, from
+   *     which it gets the latest request ID and triggers its callbacks.
    * Never use directly and always use `.bind()` to set `this`.
    * @private
    */
-  static _checkRequestReadyAutorun (comp) {
+  static _statsChangedAutorun (comp) {
     check(this, self);
 
     const stats = this.stats;
+    // stats is undefined when the connection is not ready.
     if (!stats) {
       return;
     }
-    const requestId = stats.requestId;
-    if (requestId === this._runtime.lastReceivedRequestId) {
-      return;
+
+    // Check if lastLoadTime is changed (likely by server).
+    if (stats.lastLoadTime > this._runtime.lastLoadTime) {
+      this._runtime.lastLoadTime = stats.lastLoadTime;
     }
 
-    this._runtime.lastReceivedRequestId = requestId;
+    // Check if requestId is changed.
+    if (stats.requestId !== this._runtime.lastReceivedRequestId) {
+      this._runtime.lastReceivedRequestId = stats.requestId;
 
-    self._markRequestReady(this, requestId);
-    this._log('request ready', requestId, stats);
+      self._markRequestReady(this, stats.requestId);
+      this._log('request ready', stats.requestId, stats);
 
-    // Trigger callbacks outside of the autorun to avoid issues with Tracker.
-    Meteor._setImmediate(self._triggerRequestReadyCallbacks.bind(self, this, requestId));
+      // Trigger callbacks outside of the autorun to avoid issues with Tracker.
+      Meteor._setImmediate(self._triggerRequestReadyCallbacks.bind(self, this, stats.requestId));
+    }
   }
 
 
@@ -660,6 +666,8 @@ class InfiniLoadClient extends InfiniLoadBase {
     this._runtime.lastReceivedRequestId = '';
     this._runtime.findLimit = this._initialLimit;
     this._runtime.lastLoadTime = 0;
+    this._runtime.computations = {};
+    this._runtime.subscription = null;
     this._requestDocuments.remove({});
 
     if (template) {
@@ -672,7 +680,7 @@ class InfiniLoadClient extends InfiniLoadBase {
       this._subscribe = Meteor.subscribe.bind(Meteor);
     }
 
-    this._runtime.computations['checkRequestReady'] = this._autorun(self._checkRequestReadyAutorun.bind(this));
+    this._runtime.computations['checkRequestReady'] = this._autorun(self._statsChangedAutorun.bind(this));
 
     const handle = self._newSubscription(this);
 
@@ -698,6 +706,7 @@ class InfiniLoadClient extends InfiniLoadBase {
         comp.stop();
       }
     }
+    this._runtime.computations = {};
     // Stop all subscriptions.
     if (this._runtime.subscription) {
       // It's OK to call `stop` multiple times.
@@ -711,7 +720,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
     this._runtime.requestId = '';
     this._runtime.lastReceivedRequestId = '';
-    this._runtime.findLimit = this._initialLimit;
+    this._runtime.findLimit = 0;
     this._runtime.lastLoadTime = 0;
     this._requestDocuments.remove({});
 

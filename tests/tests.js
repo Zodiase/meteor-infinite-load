@@ -112,6 +112,8 @@ if (Meteor.isClient) {
   //! For debugging only.
   window.Meteor = Meteor;
 
+  let globalInst = null;
+
   Tinytest.addAsync('Basics - client side methods', function (test, next) {
     const onLibReady = (error, result) => {
       if (error) {
@@ -174,48 +176,46 @@ if (Meteor.isClient) {
     Meteor.call('newlib', {}, onLibReady);
   });
 
-  Tinytest.addAsync('APIs - state before starting', function (test, next) {
+  Tinytest.addAsync('APIs - initialize', function (test, next) {
     const onLibReady = (error, result) => {
       if (error) {
         throw error;
       }
       const id = result;
-      const inst = new lib(dataCollection, {
+      globalInst = new lib(dataCollection, {
         id,
         verbose: true
       });
 
-      test.equal(inst.find({}).count(), 0);
-      test.equal(typeof inst.findOne({}), 'undefined');
-      test.equal(inst.count(), 0);
-      test.equal(inst.countMore(), 0);
-      test.equal(inst.countNew(), 0);
-      test.equal(inst.countTotal(), 0);
-      test.equal(inst.hasMore(), false);
-      test.equal(inst.hasNew(), false);
+      //!
+      window.inst = globalInst;
+
+      test.ok();
       next();
     };
     Meteor.call('newlib', {}, onLibReady);
   });
 
-  Tinytest.addAsync('APIs - subscribe', function (test, next) {
-    const onLibReady = (error, result) => {
-      if (error) {
-        throw error;
-      }
-      const id = result;
-      const inst = new lib(dataCollection, {
-        id,
-        verbose: true
-      });
+  Tinytest.add('APIs - state before starting', function (test) {
+    const inst = globalInst;
 
-      inst.start().ready(() => {
-        inst.stop();
-        test.ok();
-        next();
-      });
-    };
-    Meteor.call('newlib', {}, onLibReady);
+    test.equal(inst.find({}).count(), 0);
+    test.equal(typeof inst.findOne({}), 'undefined');
+    test.equal(inst.count(), 0);
+    test.equal(inst.countMore(), 0);
+    test.equal(inst.countNew(), 0);
+    test.equal(inst.countTotal(), 0);
+    test.equal(inst.hasMore(), false);
+    test.equal(inst.hasNew(), false);
+  });
+
+  Tinytest.addAsync('APIs - subscribe', function (test, next) {
+    const inst = globalInst;
+    inst.start().ready(() => {
+//       inst.stop();
+      test.ok();
+//       next();
+    });
   });
 
 }
