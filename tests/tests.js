@@ -287,9 +287,22 @@ if (Meteor.isClient) {
         test.equal(inst.hasMore(), globalTestItems.length > inst.limit);
         test.equal(inst.hasNew(), newItems.length > 0);
 
-        inst.stop();
+        const limitBeforeLoadNew = inst.limit;
 
-        next();
+        inst.loadNew().ready(() => {
+          test.equal(inst.limit, limitBeforeLoadNew + newItems.length);
+          test.equal(inst.find({}).count(), inst.limit);
+          test.equal(inst.count(), inst.limit);
+          test.equal(inst.countMore(), inst.countTotal() - inst.countNew() - inst.count());
+          test.equal(inst.countNew(), 0);
+          test.equal(inst.countTotal(), globalTestItems.length + newItems.length);
+          test.equal(inst.hasMore(), (globalTestItems.length + newItems.length) > inst.limit);
+          test.equal(inst.hasNew(), false);
+
+          inst.stop();
+
+          next();
+        });
       });
     };
 
