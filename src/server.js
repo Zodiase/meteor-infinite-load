@@ -156,7 +156,6 @@ class InfiniLoadServer extends InfiniLoadBase {
 
       const cursor = collection.find(findSelector, {
         'sort': findSort,
-        'limit': findLimit,
         'fields': findFields
       });
 
