@@ -473,10 +473,20 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Get the stats document.
+   * A reactive data source.
    * @returns {InfiniLoadServer~StatsDocument}
    */
   get stats () {
     return this.rawCollection.findOne(self._CONST.STATS_DOCUMENT_ID);
+  }
+
+  /**
+   * Get the current load limit.
+   * A reactive data source.
+   * @returns {Number}
+   */
+  get limit () {
+    return this.stats.limit;
   }
 
   /*****************************************************************************
@@ -514,7 +524,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    */
   count () {
     const stats = this.stats;
-    return (!stats) ? 0 : stats.loadedDocumentCount;
+    return (!stats) ? 0 : stats.loadedDocCount;
   }
 
   /**
@@ -524,7 +534,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    */
   countMore () {
     const stats = this.stats;
-    return (!stats) ? 0 : stats.moreDocumentToLoadCount;
+    return (!stats) ? 0 : (Math.max(stats.oldDocCount - stats.loadedDocCount, 0));
   }
 
   /**
@@ -534,7 +544,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    */
   countNew () {
     const stats = this.stats;
-    return (!stats) ? 0 : stats.newDocumentToLoadCount;
+    return (!stats) ? 0 : stats.newDocCount;
   }
 
   /**
@@ -544,7 +554,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    */
   countTotal () {
     const stats = this.stats;
-    return (!stats) ? 0 : stats.totalDocumentCount;
+    return (!stats) ? 0 : stats.totalDocCount;
   }
 
   /**
