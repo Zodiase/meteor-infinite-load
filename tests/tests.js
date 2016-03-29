@@ -39,20 +39,28 @@ check(lib, Function);
 
 // Server side resetting for each pass of tests.
 if (Meteor.isServer) {
-  Tinytest.add('Reset all on test start', function (test) {
+  Tinytest.add('Reset - server', function (test) {
     dataCollection.remove({});
     test.ok();
   });
 
   Meteor.methods({
-    'newlib': (options) => {
+    'newlib' (options) {
       check(options, Object);
       options.id = newInstanceId();
       options.verbose = true;
-      saveInstance(options.id, new lib(dataCollection, options));
+      const infiniServer = new lib(dataCollection, options);
+      saveInstance(options.id, infiniServer);
+      console.log('new lib ready', options.id);
       return options.id;
     },
-    'insert': (doc) => {
+    'publish' (name) {
+      Meteor.publish(name, function () {
+        this.ready();
+      });
+      return name;
+    },
+    'insert' (doc) {
       check(doc, Object);
       delete doc._id;
       const docId = dataCollection.insert(doc);
@@ -61,13 +69,13 @@ if (Meteor.isServer) {
   });
 }
 
-Tinytest.add('Basics - Can not call InfiniLoad without new', function (test) {
+Tinytest.add('Instantiation - can not call InfiniLoad without new', function (test) {
   test.throws(function () {
     lib(dataCollection);
   });
 });
 
-Tinytest.add('Basics - Instantiation', function (test) {
+Tinytest.add('Instantiation - instantiation', function (test) {
   const id = newInstanceId();
   const inst = new lib(dataCollection, {
     id,
@@ -90,7 +98,7 @@ Tinytest.add('Basics - Instantiation', function (test) {
   test.equal(inst.originalCollection, dataCollection);
 });
 
-Tinytest.add('Basics - Multiple Identical Instantiations throw', function (test) {
+Tinytest.add('Instantiation - multiple identical instantiations throw', function (test) {
   const id = newInstanceId();
   const inst = new lib(dataCollection, {
     id,
@@ -147,6 +155,31 @@ if (Meteor.isClient) {
     Meteor.call('newlib', {}, onLibReady);
   });
 
+  Tinytest.addAsync('Basics - Client side properties', function (test, next) {
+    const onLibReady = (error, result) => {
+      if (error) {
+        throw error;
+      }
+      const id = result;
+      const inst = new lib(dataCollection, {
+        id,
+        verbose: true
+      });
+
+      const properties = {
+        'originalCollection': Mongo.Collection,
+        'id': String,
+        'collectionName': String,
+        'rawCollection': Mongo.Collection
+      };
+      for (let key of Object.keys(properties)) {
+        test.equal(Match.test(inst[key], properties[key]), true);
+      }
+      next();
+    };
+    Meteor.call('newlib', {}, onLibReady);
+  });
+
   Tinytest.addAsync('APIs - State before starting', function (test, next) {
     const onLibReady = (error, result) => {
       if (error) {
@@ -171,8 +204,29 @@ if (Meteor.isClient) {
     Meteor.call('newlib', {}, onLibReady);
   });
 
+/*
+  Tinytest.addAsync('APIs - Dynamic publishing', function (test, next) {
+    const name = 'foobar';
+    const onPubReady = (error, result) => {
+      console.log('onPubReady');
+      if (error) {
+        throw error;
+      }
+      const name = result;
+      Meteor.subscribe(name, function () {
+        console.log('sub ready');
+      });
+      test.ok();
+//       next();
+    };
+    Meteor.call('publish', name, onPubReady);
+    console.log('called');
+  });
+*/
+
   Tinytest.addAsync('APIs - Subscribe', function (test, next) {
     const onLibReady = (error, result) => {
+      console.log('onLibReady');
       if (error) {
         throw error;
       }
@@ -183,12 +237,13 @@ if (Meteor.isClient) {
       });
 
       //! Somehow start immediately after instantiation does not work.
-      //inst.start();
+      inst.start();
       window.inst = inst;
       test.ok();
-      next();
+//       next();
     };
     Meteor.call('newlib', {}, onLibReady);
+    console.log('called');
   });
 
 }

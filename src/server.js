@@ -125,19 +125,20 @@ class InfiniLoadServer extends InfiniLoadBase {
      */
 
     Meteor.publish(me.collectionName, function (options = {}) {
-      check(options, self._CONST.PUBLISH_OPTIONS_PATTERN);
-
-      const subscriptionId = this._subscriptionId;
+      const connection = this;
+      const subscriptionId = connection._subscriptionId;
+      const userId = connection.userId;
+      // `Date.now()` is faster than `new Date().getTime()`.
+      const now = Date.now();
 
       me._log('subscribe', subscriptionId, options);
 
-      // `Date.now()` is faster than `new Date().getTime()`.
-      const now = Date.now();
+      check(options, self._CONST.PUBLISH_OPTIONS_PATTERN);
 
       const requestId = options.requestId;
 
       if (!requestId) {
-        this.ready();
+        connection.ready();
         return;
       }
 
@@ -146,12 +147,12 @@ class InfiniLoadServer extends InfiniLoadBase {
       // If `lastLoadTime` is not specified, it is `now`.
       const lastLoadTime = options.lastLoadTime || now;
 
-      const findSelector = getFindSelector(this.userId, serverArgs);
+      const findSelector = getFindSelector(userId, serverArgs);
       //! Current only support Object style sort options. Need to support array style.
-      const findSort = getFindSort(this.userId, serverArgs);
+      const findSort = getFindSort(userId, serverArgs);
       // Enforce sort by time field.
       findSort[timeFieldName] = -1;
-      const findFields = getFindFields(this.userId, serverArgs);
+      const findFields = getFindFields(userId, serverArgs);
 
       const cursor = collection.find(findSelector, {
         'sort': findSort,
@@ -211,11 +212,11 @@ class InfiniLoadServer extends InfiniLoadBase {
       }
 
       const addStatsDocumentToClient = () => {
-        this.added(me.collectionName, self._CONST.STATS_DOCUMENT_ID, GenerateStatsDocument());
+        connection.added(me.collectionName, self._CONST.STATS_DOCUMENT_ID, GenerateStatsDocument());
       };
 
       const changeStatsDocumentOnClient = () => {
-        this.changed(me.collectionName, self._CONST.STATS_DOCUMENT_ID, GenerateStatsDocument());
+        connection.changed(me.collectionName, self._CONST.STATS_DOCUMENT_ID, GenerateStatsDocument());
       };
 
       const observer = cursor.observe({
@@ -243,7 +244,7 @@ class InfiniLoadServer extends InfiniLoadBase {
             if (loadedDocuments.size < findLimit) {
               me._log('sending to client', doc._id);
               loadedDocuments.set(doc._id, doc);
-              this.added(me.collectionName, doc._id, doc);
+              connection.added(me.collectionName, doc._id, doc);
             }
           }
 
@@ -259,7 +260,7 @@ class InfiniLoadServer extends InfiniLoadBase {
           if (loadedDocuments.has(oldDoc._id)) {
             me._log('updating to client', oldDoc._id);
             loadedDocuments.set(oldDoc._id, newDoc);
-            this.changed(me.collectionName, oldDoc._id, newDoc);
+            connection.changed(me.collectionName, oldDoc._id, newDoc);
           }
         },
         'removed': (doc) => {
@@ -279,7 +280,7 @@ class InfiniLoadServer extends InfiniLoadBase {
             if (loadedDocuments.has(doc._id)) {
               me._log('removing from client', doc._id);
               loadedDocuments.delete(doc._id);
-              this.removed(me.collectionName, doc._id);
+              connection.removed(me.collectionName, doc._id);
             }
           }
 
@@ -293,8 +294,8 @@ class InfiniLoadServer extends InfiniLoadBase {
 
       addStatsDocumentToClient();
 
-      this.ready();
-      this.onStop(() => {
+      connection.ready();
+      connection.onStop(() => {
         observer.stop();
       });
     });

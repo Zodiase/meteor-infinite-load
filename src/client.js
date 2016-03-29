@@ -42,20 +42,20 @@ class InfiniLoadClient extends InfiniLoadBase {
      * @private
      * @type {Number}
      */
-    this._initialLimit = options.initialLimit || 10;
+    me._initialLimit = options.initialLimit || 10;
     /**
      * How many more documents to load by default when `.loadMore()` is called.
      * @private
      * @type {Number}
      */
-    this._limitIncrement = options.limitIncrement || this._initialLimit;
+    me._limitIncrement = options.limitIncrement || me._initialLimit;
 
     /**
      * Indicate whether this instance is started.
      * @private
      * @type {Boolean}
      */
-    this._started = false;
+    me._started = false;
     /**
      * Reactive store of the current request Id.
      * Every time any of the request parameters changes and results in a new subscription,
@@ -65,14 +65,14 @@ class InfiniLoadClient extends InfiniLoadBase {
      * @private
      * @type {String}
      */
-    this._requestId = new ReactiveVar(null);
+    me._requestId = new ReactiveVar(null);
     /**
      * Runtime data representing how many documents are requested from server.
      * This value should be initialized by `.start()`.
      * @private
      * @type {Number}
      */
-    this._findLimit = 0;
+    me._findLimit = 0;
     /**
      * Runtime data representing when was the last request.
      * This value is sent with the subscription to allow server cut between new and old documents.
@@ -81,7 +81,7 @@ class InfiniLoadClient extends InfiniLoadBase {
      * @private
      * @type {Number}
      */
-    this._lastLoadTime = 0;
+    me._lastLoadTime = 0;
     /**
      * Arbitrary data sent with the subscription to be used by server-side callback functions.
      * This value is not initialized or reset by `.start()`.
@@ -90,7 +90,7 @@ class InfiniLoadClient extends InfiniLoadBase {
      * @private
      * @type {Object}
      */
-    this._serverArgs = {};
+    me._serverArgs = {};
     /**
      * Use a collection for easily generating unique request IDs.
      * Each document represents a unique request and stores its related data.
@@ -98,11 +98,11 @@ class InfiniLoadClient extends InfiniLoadBase {
      * @private
      * @type {Mongo.Collection}
      */
-    this._requestDocuments = new Mongo.Collection(null);
+    me._requestDocuments = new Mongo.Collection(null);
 
-    this._log('initializing', {
-      'initialLimit': this._initialLimit,
-      'limitIncrement': this._limitIncrement
+    me._log('initializing', {
+      'initialLimit': me._initialLimit,
+      'limitIncrement': me._limitIncrement
     });
 
     /**
@@ -110,25 +110,25 @@ class InfiniLoadClient extends InfiniLoadBase {
      * @private
      * @type {Object.<String, Function>}
      */
-    this._eventHandlers = {};
+    me._eventHandlers = {};
     /**
      * Store computations.
      * @private
      * @type {Object.<String, Object>}
      */
-    this._computations = {};
+    me._computations = {};
     /**
      * Store subscriptions.
      * @private
      * @type {Object.<String, Object>}
      */
-    this._subscriptions = {};
+    me._subscriptions = {};
     /**
      * The dedicated collection storing data for this InfiniLoad instance, including the stats document.
      * @private
      * @type {Mongo.Collection}
      */
-    this._rawCollection = this._getRawCollection();
+    me._rawCollection = me._getRawCollection();
   }
 
   /**
@@ -510,12 +510,10 @@ class InfiniLoadClient extends InfiniLoadBase {
     this._started = true;
 
     // Initialize variables.
-/*
     this._requestId.set(null);
     this._findLimit = this._initialLimit;
     this._lastLoadTime = 0;
     this._requestDocuments.remove({});
-*/
 
     if (template) {
       this._log('autorun/subscribe with template');
@@ -528,7 +526,6 @@ class InfiniLoadClient extends InfiniLoadBase {
     }
 
     this._computations['subscription'] = this._autorun(this._subscriptionAutorun.bind(this));
-
     this._useNewRequest();
 
     this._log('started');
