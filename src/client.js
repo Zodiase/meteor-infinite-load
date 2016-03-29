@@ -18,7 +18,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @property {Number} [initialLimit=10]
    *           The max number of documents to load on start.
    * @property {Number} [limitIncrement=initialLimit]
-   *           The number of additional documents to load on `.loadMore()`.
+   *           The number of additional documents to load on `.loadMore()` by default.
    */
 
   /**
@@ -44,58 +44,77 @@ class InfiniLoadClient extends InfiniLoadBase {
     /**
      * How many documents to load on start.
      * @private
+     * @readonly
      * @type {Number}
      */
     me._initialLimit = options.initialLimit || 10;
     /**
      * How many more documents to load by default when `.loadMore()` is called.
      * @private
+     * @readonly
      * @type {Number}
      */
     me._limitIncrement = options.limitIncrement || me._initialLimit;
 
+    me._log('initializing', {
+      'initialLimit': me._initialLimit,
+      'limitIncrement': me._limitIncrement
+    });
+
+    /**
+     * Namespace storing runtime data.
+     * @private
+     * @type {Object}
+     */
+    me._runtime = {};
+
     /**
      * Indicate whether this instance is started.
-     * @private
      * @type {Boolean}
      */
-    me._started = false;
+    me._runtime.started = false;
     /**
      * Store the current request ID.
-     * This value should be initialized by `.start()`.
-     * @private
+     * Reset on start.
      * @type {String}
      */
-    me._requestId = '';
+    me._runtime.requestId = '';
     /**
      * Store the last request ID received from the stats document.
      * This value is used for checking if the request ID in the stats document has been changed.
-     * This value should be initialized by `.start()`.
-     * @private
+     * Reset on start.
      * @type {String}
      */
-    me._lastReceivedRequestId = '';
+    me._runtime.lastReceivedRequestId = '';
     /**
-     * Runtime data representing how many documents are requested from server.
-     * This value should be initialized by `.start()`.
-     * @private
+     * Represent how many documents are requested from server.
+     * Reset on start.
      * @type {Number}
      */
-    me._findLimit = 0;
+    me._runtime.findLimit = 0;
     /**
-     * Runtime data representing when was the last request.
+     * Represent when was the last request.
      * This value is sent with the subscription to allow server cut between new and old documents.
-     * This value should be initialized by `.start()`.
+     * Reset on start.
      * This value starts with 0 (infinitely old).
-     * @private
      * @type {Number}
      */
-    me._lastLoadTime = 0;
+    me._runtime.lastLoadTime = 0;
+    /**
+     * Store computations.
+     * @type {Object.<String, Object>}
+     */
+    me._runtime.computations = {};
+    /**
+     * Store the active subscription.
+     * @type {Object}
+     */
+    me._runtime.subscription = null;
+
     /**
      * Arbitrary data sent with the subscription to be used by server-side callback functions.
-     * This value is not initialized or reset by `.start()`.
-     * This value should be changed by `.setServerParameters()`.
-     * This value is not used by the library at all.
+     * This value is changed by dedicated setters.
+     * This value is not consumed by the library at all.
      * @private
      * @type {Object}
      */
@@ -103,16 +122,11 @@ class InfiniLoadClient extends InfiniLoadBase {
     /**
      * Use a collection for easily generating unique request IDs.
      * Each document represents a unique request and stores its related data.
-     * This collection is reset on `.start()`.
+     * Reset on start.
      * @private
      * @type {Mongo.Collection}
      */
     me._requestDocuments = new Mongo.Collection(null);
-
-    me._log('initializing', {
-      'initialLimit': me._initialLimit,
-      'limitIncrement': me._limitIncrement
-    });
 
     /**
      * Store callback functions for each event.
@@ -121,64 +135,32 @@ class InfiniLoadClient extends InfiniLoadBase {
      */
     me._eventHandlers = {};
     /**
-     * Store computations.
-     * @private
-     * @type {Object.<String, Object>}
-     */
-    me._computations = {};
-    /**
-     * Store the active subscription.
-     * @private
-     * @type {Object}
-     */
-    me._subscription = null;
-    /**
      * The dedicated collection storing data for this InfiniLoad instance, including the stats document.
      * @private
      * @type {Mongo.Collection}
      */
-    me._rawCollection = me._getRawCollection();
+    me._rawCollection = self._getRawCollection(me);
   }
 
-  /**
-   * Static methods.
-   */
+  /*****************************************************************************
+    Static methods.
+  *****************************************************************************/
 
   /**
-   * Getters and Setters.
-   */
-
-  /**
-   * Get the dedicated collection for this instance for this collection.
+   * Helper function for fetching the dedicated collection for the instance.
+   * @private
+   * @param {InfiniLoadClient} instance
    * @returns {Mongo.Collection}
    */
-  get rawCollection () {
-    return this._rawCollection;
-  }
+  static _getRawCollection (instance) {
+    check(instance, self);
 
-  /**
-   * Get the stats document.
-   * @returns {Object}
-   */
-  get stats () {
-    return this.rawCollection.findOne(self._CONST.STATS_DOCUMENT_ID);
-  }
-
-  /**
-   * Instance methods.
-   */
-
-  /**
-   * Get the dedicated collection for this instance for this collection.
-   * @returns {Mongo.Collection}
-   */
-  _getRawCollection () {
     // Shortcut.
     const collections = self._DATA.collections;
 
-    const collectionName = this.originalCollection._name;
-    const instanceId = this.id;
-    const instanceCollectionName = this.collectionName;
+    const collectionName = instance.originalCollection._name;
+    const instanceId = instance.id;
+    const instanceCollectionName = instance.collectionName;
 
     if (!collections.has(collectionName)) {
       collections.set(collectionName, new Map());
@@ -193,10 +175,315 @@ class InfiniLoadClient extends InfiniLoadBase {
   }
 
   /**
+   * Helper function for calling event handlers.
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @param {String} eventName
+   *        Name of the event.
+   * @param {Object} context
+   *        Context for the callbacks.
+   * @param {Array.<*>} args
+   *        The arguments to be passed to callbacks.
+   */
+  static _callEventHandlers (instance, eventName, context, args) {
+    check(instance, self);
+    check(eventName, String);
+    check(context, Object);
+    check(args, Array);
+
+    // Shortcut.
+    const eList = self._CONST.SUPPORTED_EVENTS;
+
+    if (eList.indexOf(eventName) === -1) {
+      return;
+    }
+    //else
+    for (let handler of instance._eventHandlers[eventName]) {
+      handler.apply(context, args);
+    }
+  }
+
+  /**
+   * Helper function for creating a new request document.
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @returns {String}
+   *          The ID of the new request document.
+   */
+  static _newRequest (instance) {
+    check(instance, self);
+
+    const newRequestDocument = {
+      createdAt: Date.now(),
+      params: null,
+      startAt: 0,
+      confirmedAt: 0,
+      readyAt: 0,
+      onReady: []
+    };
+    const newRequestId = instance._requestDocuments.insert(newRequestDocument);
+    return newRequestId;
+  }
+
+  /**
+   * Helper function for saving request parameters into the collection.
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @param {String} requestId
+   * @param {Object} params
+   */
+  static _saveRequestParameters (instance, requestId, params) {
+    check(instance, self);
+    check(requestId, String);
+    check(params, Object);
+
+    instance._requestDocuments.update(requestId, {
+      $set: {
+        params
+      }
+    });
+  }
+
+  /**
+   * Helper function for loading parameters of a request document from the collection.
+   * Returns null if the request document doesn't exist or it doesn't have the data.
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @param {String} requestId
+   * @returns {Object|null}
+   */
+  static _loadRequestParameters (instance, requestId) {
+    check(instance, self);
+    check(requestId, String);
+
+    const requestDoc = instance._requestDocuments.findOne(requestId);
+    return (!requestDoc) ? null : (requestDoc.params || null);
+  }
+
+  /**
+   * Helper function for adding a callback function to be called when the request is ready.
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @param {String} requestId
+   * @param {Function} callback
+   */
+  static _registerRequestReadyCallback (instance, requestId, callback) {
+    check(instance, self);
+    check(requestId, String);
+    check(callback, Function);
+
+    instance._requestDocuments.update(requestId, {
+      $push: {
+        onReady: callback
+      }
+    });
+  }
+
+  /**
+   * Helper function for triggering all ready callback functions for the request.
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @param {String} requestId
+   */
+  static _triggerRequestReadyCallbacks (instance, requestId) {
+    check(instance, self);
+    check(requestId, String);
+
+    const requestDoc = instance._requestDocuments.findOne(requestId);
+    if (!requestDoc) {
+      return;
+    }
+
+    const callbacks = requestDoc.onReady || [];
+    for (let cb of callbacks) {
+      cb();
+    }
+  }
+
+  /**
+   * Helper function for marking the start time of a request in its request document.
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @param {String} requestId
+   */
+  static _markRequestStart (instance, requestId) {
+    check(instance, self);
+    check(requestId, String);
+
+    instance._requestDocuments.update(requestId, {
+      $set: {
+        startAt: Date.now()
+      }
+    });
+  }
+
+  /**
+   * Helper function for marking the confirm time of a request in its request document.
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @param {String} requestId
+   */
+  static _markRequestConfirmed (instance, requestId) {
+    check(instance, self);
+    check(requestId, String);
+
+    instance._requestDocuments.update(requestId, {
+      $set: {
+        confirmedAt: Date.now()
+      }
+    });
+  }
+
+  /**
+   * Helper function for marking the ready time of a request in its request document.
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @param {String} requestId
+   */
+  static _markRequestReady (instance, requestId) {
+    check(instance, self);
+    check(requestId, String);
+
+    instance._requestDocuments.update(requestId, {
+      $set: {
+        readyAt: Date.now()
+      }
+    });
+  }
+
+  /**
+   * Callback when a subscription call returns.
+   * Never use directly and always use `.bind()` to set `this`.
+   * @private
+   * @param {String} requestId
+   */
+  static _onSubscriptionReady (requestId) {
+    check(this, self);
+    check(requestId, String);
+
+    this._log('request confirmed', requestId);
+    self._markRequestConfirmed(this, requestId);
+  }
+
+  /**
+   * @typedef {Object} InfiniLoadClient~ActionHandle
+   * @property {Function} ready
+   *           Pass a callback to be executed when the action is ready.
+   */
+
+  /**
+   * Helper function for generating action handles.
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @param {String} requestId
+   * @returns {InfiniLoadClient~ActionHandle}
+   */
+  static _getActionHandle (instance, requestId) {
+    check(instance, self);
+    check(requestId, String);
+
+    return {
+      ready: self._registerRequestReadyCallback.bind(self, instance, requestId)
+    };
+  }
+
+  /**
+   * Use the latest parameters to start a new subscription.
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @returns {InfiniLoadClient~ActionHandle}
+   */
+  static _newSubscription (instance) {
+    check(instance, self);
+
+    const requestId = instance._runtime.requestId = self._newRequest(instance);
+
+    /**
+     * @typedef {Object} InfiniLoadServer~SubscribeOptions
+     * @property {String} requestId
+     *           A unique identifier for each subscription request.
+     * @property {Object} args
+     *           Arguments passed to find option factories.
+     * @property {Number} limit
+     *           How many documents to return.
+     * @property {Number} lastLoadTime
+     *           Cut-off time between new and old documents.
+     *           This is tracked by the client so other parameters can be changed without moving the cut-off line.
+     */
+    const parameters = {
+      requestId,
+      args: instance._serverArgs,
+      limit: instance._runtime.findLimit,
+      lastLoadTime: instance._runtime.lastLoadTime
+    };
+    instance._log('new request', requestId, parameters);
+    self._saveRequestParameters(instance, requestId, parameters);
+    self._markRequestStart(instance, requestId);
+    instance._runtime.subscription = instance._subscribe(instance.collectionName, parameters, self._onSubscriptionReady.bind(instance, requestId));
+
+    return self._getActionHandle(instance, requestId);
+  }
+
+  /**
+   * Autorun for checking what requests are ready.
+   * It keeps fetching the stats document, from which it gets the latest request ID
+   *     and triggers its callbacks.
+   * Never use directly and always use `.bind()` to set `this`.
+   * @private
+   */
+  static _checkRequestReadyAutorun (comp) {
+    check(this, self);
+
+    const stats = this.stats;
+    if (!stats) {
+      return;
+    }
+    const requestId = stats.requestId;
+    if (requestId === this._runtime.lastReceivedRequestId) {
+      return;
+    }
+
+    this._runtime.lastReceivedRequestId = requestId;
+
+    self._markRequestReady(this, requestId);
+    this._log('request ready', requestId, stats);
+
+    // Trigger callbacks outside of the autorun to avoid issues with Tracker.
+    Meteor._setImmediate(self._triggerRequestReadyCallbacks.bind(self, this, requestId));
+  }
+
+
+  /*****************************************************************************
+    Getters and Setters.
+  *****************************************************************************/
+
+  /**
+   * Get the dedicated collection for this instance for this collection.
+   * @returns {Mongo.Collection}
+   */
+  get rawCollection () {
+    return this._rawCollection;
+  }
+
+  /**
+   * Get the stats document.
+   * @returns {InfiniLoadServer~StatsDocument}
+   */
+  get stats () {
+    return this.rawCollection.findOne(self._CONST.STATS_DOCUMENT_ID);
+  }
+
+  /*****************************************************************************
+    Instance methods.
+  *****************************************************************************/
+
+  /**
    * Same as `Mongo.Collection.prototype.find`.
+   * A reactive data source.
    */
   find (selector = {}, options = {}) {
     const realSelector = {
+      // 'And' with `FILTER_STATS_DOCUMENT` to filter out the stats document.
       $and: [
         self._CONST.FILTER_STATS_DOCUMENT,
         selector
@@ -207,6 +494,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Same as `Mongo.Collection.prototype.findOne`.
+   * A reactive data source.
    */
   findOne (selector = {}, options = {}) {
     options.limit = 1;
@@ -215,6 +503,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Return the number of documents that have been loaded.
+   * A reactive data source.
    * @returns {Number}
    */
   count () {
@@ -224,6 +513,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Return the number of old documents that have not been loaded yet.
+   * A reactive data source.
    * @returns {Number}
    */
   countMore () {
@@ -233,6 +523,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Return the number of new documents that have not been loaded yet.
+   * A reactive data source.
    * @returns {Number}
    */
   countNew () {
@@ -242,6 +533,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Return the number of all documents in the collection.
+   * A reactive data source.
    * @returns {Number}
    */
   countTotal () {
@@ -251,6 +543,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Returns `true` if there are more old documents to load.
+   * A reactive data source.
    * @returns {Boolean}
    */
   hasMore () {
@@ -259,6 +552,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Returns `true` if there are more new documents to load.
+   * A reactive data source.
    * @returns {Boolean}
    */
   hasNew () {
@@ -346,250 +640,6 @@ class InfiniLoadClient extends InfiniLoadBase {
   }
 
   /**
-   * Helper function for calling event handlers.
-   * @private
-   * @param {String} eventName
-   *        Name of the event.
-   * @param {Object} context
-   *        Context for the callbacks.
-   * @param {Array.<*>} args
-   *        The arguments to be passed to callbacks.
-   */
-  _callEventHandlers (eventName, context, args) {
-    check(eventName, String);
-    check(context, Object);
-    check(args, Array);
-
-    // Shortcut.
-    const eList = self._CONST.SUPPORTED_EVENTS;
-
-    if (eList.indexOf(eventName) === -1) {
-      return;
-    }
-    //else
-    for (let handler of this._eventHandlers[eventName]) {
-      handler.apply(context, args);
-    }
-  }
-
-  /**
-   * Helper function for creating a new request document.
-   * @private
-   * @returns {String}
-   *          The ID of the new request document.
-   */
-  _newRequest () {
-    const newRequestDocument = {
-      createdAt: Date.now(),
-      params: null,
-      startAt: 0,
-      confirmedAt: 0,
-      readyAt: 0,
-      onReady: []
-    };
-    const newRequestId = this._requestDocuments.insert(newRequestDocument);
-    return newRequestId;
-  }
-
-  /**
-   * Helper function for saving request parameters into the collection.
-   * @private
-   * @param {String} requestId
-   * @param {Object} params
-   */
-  _saveRequestParameters (requestId, params) {
-    check(requestId, String);
-    check(params, Object);
-
-    this._requestDocuments.update(requestId, {
-      $set: {
-        params
-      }
-    });
-  }
-
-  /**
-   * Helper function for adding a callback function to be called when the request is ready.
-   * @private
-   * @param {String} requestId
-   * @param {Function} callback
-   */
-  _registerRequestReadyCallback (requestId, callback) {
-    check(requestId, String);
-    check(callback, Function);
-
-    this._requestDocuments.update(requestId, {
-      $push: {
-        onReady: callback
-      }
-    });
-  }
-
-  /**
-   * Helper function for triggering all ready callback functions for the request.
-   * @private
-   * @param {String} requestId
-   */
-  _triggerRequestReadyCallbacks (requestId) {
-    check(requestId, String);
-
-    const requestDoc = this._requestDocuments.findOne(requestId);
-    if (!requestDoc) {
-      return;
-    }
-
-    const callbacks = requestDoc.onReady || [];
-    for (let cb of callbacks) {
-      cb();
-    }
-  }
-
-  /**
-   * Helper function for loading parameters of a request document from the collection.
-   * Returns null if the request document doesn't exist or it doesn't have the data.
-   * @private
-   * @param {String} requestId
-   * @returns {Object|null}
-   */
-  _loadRequestParameters (requestId) {
-    check(requestId, String);
-
-    const requestDoc = this._requestDocuments.findOne(requestId);
-    return (!requestDoc) ? null : (requestDoc.params || null);
-  }
-
-  /**
-   * Helper function for marking the start time of a request in its request document.
-   * @private
-   * @param {String} requestId
-   */
-  _markRequestStart (requestId) {
-    check(requestId, String);
-
-    this._requestDocuments.update(requestId, {
-      $set: {
-        startAt: Date.now()
-      }
-    });
-  }
-
-  /**
-   * Helper function for marking the confirm time of a request in its request document.
-   * @private
-   * @param {String} requestId
-   */
-  _markRequestConfirmed (requestId) {
-    check(requestId, String);
-
-    this._requestDocuments.update(requestId, {
-      $set: {
-        confirmedAt: Date.now()
-      }
-    });
-  }
-
-  /**
-   * Helper function for marking the ready time of a request in its request document.
-   * @private
-   * @param {String} requestId
-   */
-  _markRequestReady (requestId) {
-    check(requestId, String);
-
-    this._requestDocuments.update(requestId, {
-      $set: {
-        readyAt: Date.now()
-      }
-    });
-  }
-
-  /**
-   * Callback when a subscription call returns.
-   * @private
-   */
-  _onSubscriptionReady (requestId) {
-    this._log('request confirmed', requestId);
-    this._markRequestConfirmed(requestId);
-  }
-
-  /**
-   * @typedef {Object} InfiniLoadClient~ActionHandle
-   * @property {Function} ready
-   *           Pass a callback to be executed when the action is ready.
-   */
-
-  /**
-   * Helper function for generating action handles.
-   * @private
-   * @param {String} requestId
-   * @returns {InfiniLoadClient~ActionHandle}
-   */
-  _getActionHandle (requestId) {
-    return {
-      ready: this._registerRequestReadyCallback.bind(this, requestId)
-    };
-  }
-
-  /**
-   * Use the latest parameters to start a new subscription.
-   * @private
-   * @returns {InfiniLoadClient~ActionHandle}
-   */
-  _newSubscription () {
-    const requestId = this._requestId = this._newRequest();
-
-    /**
-     * @typedef {Object} InfiniLoadServer~SubscribeOptions
-     * @property {String} requestId
-     *           A unique identifier for each subscription request.
-     * @property {Object} args
-     *           Arguments passed to find option factories.
-     * @property {Number} limit
-     *           How many documents to return.
-     * @property {Number} lastLoadTime
-     *           Cut-off time between new and old documents.
-     *           This is tracked by the client so other parameters can be changed without moving the cut-off line.
-     */
-    const parameters = {
-      requestId,
-      args: this._serverArgs,
-      limit: this._findLimit,
-      lastLoadTime: this._lastLoadTime
-    };
-    this._log('new request', requestId, parameters);
-    this._saveRequestParameters(requestId, parameters);
-    this._markRequestStart(requestId);
-    this._subscription = this._subscribe(this.collectionName, parameters, this._onSubscriptionReady.bind(this, requestId));
-
-    return this._getActionHandle(requestId);
-  }
-
-  /**
-   * Autorun for checking what requests are ready.
-   * It keeps fetching the stats document, from which it gets the latest request ID
-   *     and triggers its callbacks.
-   * @private
-   */
-  _checkRequestReadyAutorun (comp) {
-    const stats = this.stats;
-    if (!stats) {
-      return;
-    }
-    const requestId = stats.requestId;
-    if (requestId === this._lastReceivedRequestId) {
-      return;
-    }
-
-    this._lastReceivedRequestId = requestId;
-
-    this._markRequestReady(requestId);
-    this._log('request ready', requestId, stats);
-
-    // Trigger callbacks outside of the autorun to avoid issues with Tracker.
-    Meteor._setImmediate(this._triggerRequestReadyCallbacks.bind(this, requestId));
-  }
-
-  /**
    * Start all the automations. If a template instance is provided, all the automations will be attached to it so they will be terminated automatically.
    * @param {Blaze.TemplateInstance} [template]
    * @returns {InfiniLoadClient~ActionHandle}
@@ -597,19 +647,19 @@ class InfiniLoadClient extends InfiniLoadBase {
   start (template) {
     check(template, Match.Optional(Blaze.TemplateInstance));
 
-    if (this._started) {
+    if (this._runtime.started) {
       throw new Error('InfiniLoadClient ' + this.collectionName + ' already started.');
     }
 
     this._log('starting...');
 
-    this._started = true;
+    this._runtime.started = true;
 
     // Initialize variables.
-    this._requestId = '';
-    this._lastReceivedRequestId = '';
-    this._findLimit = this._initialLimit;
-    this._lastLoadTime = 0;
+    this._runtime.requestId = '';
+    this._runtime.lastReceivedRequestId = '';
+    this._runtime.findLimit = this._initialLimit;
+    this._runtime.lastLoadTime = 0;
     this._requestDocuments.remove({});
 
     if (template) {
@@ -622,9 +672,9 @@ class InfiniLoadClient extends InfiniLoadBase {
       this._subscribe = Meteor.subscribe.bind(Meteor);
     }
 
-    this._computations['checkRequestReady'] = this._autorun(this._checkRequestReadyAutorun.bind(this));
+    this._runtime.computations['checkRequestReady'] = this._autorun(self._checkRequestReadyAutorun.bind(this));
 
-    const handle = this._newSubscription();
+    const handle = self._newSubscription(this);
 
     this._log('started');
 
@@ -635,36 +685,37 @@ class InfiniLoadClient extends InfiniLoadBase {
    * Stop all the automations.
    */
   stop () {
-    if (!this._started) {
+    if (!this._runtime.started) {
       return;
     }
 
     this._log('stopping...');
 
     // Stop all computations.
-    for (let name of Object.keys(this._computations)) {
-      let comp = this._computations[name];
+    for (let name of Object.keys(this._runtime.computations)) {
+      let comp = this._runtime.computations[name];
       if (!comp.stopped) {
         comp.stop();
       }
     }
     // Stop all subscriptions.
-    if (this._subscription) {
+    if (this._runtime.subscription) {
       // It's OK to call `stop` multiple times.
-      this._subscription.stop();
+      this._runtime.subscription.stop();
+      this._runtime.subscription = null;
     }
 
     // Reset variables.
     delete this._autorun;
     delete this._subscribe;
 
-    this._requestId = '';
-    this._lastReceivedRequestId = '';
-    this._findLimit = this._initialLimit;
-    this._lastLoadTime = 0;
+    this._runtime.requestId = '';
+    this._runtime.lastReceivedRequestId = '';
+    this._runtime.findLimit = this._initialLimit;
+    this._runtime.lastLoadTime = 0;
     this._requestDocuments.remove({});
 
-    this._started = false;
+    this._runtime.started = false;
 
     this._log('stopped');
   }
