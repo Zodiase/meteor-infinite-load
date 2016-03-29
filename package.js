@@ -16,17 +16,13 @@ Package.onUse(function(api) {
     'ecmascript',
     'underscore',
     'mongo',
-    'zodiase:check',
-    'blaze-html-templates',
+    'blaze',
     'tracker',
-    'reactive-var'
+    'reactive-var',
+    'zodiase:check'
   ]);
-  api.addFiles('src/setup.js', ['client', 'server']);
-  api.addFiles('src/base.js', ['client', 'server']);
-  api.addFiles('src/client/lib.js', 'client');
-  api.addFiles('src/server/lib.js', 'server');
-  api.addFiles('src/export.js', ['client', 'server']);
-  api.export('InfiniLoad');
+  api.mainModule('src/server.js', 'server');
+  api.mainModule('src/client.js', 'client');
 });
 
 Package.onTest(function(api) {

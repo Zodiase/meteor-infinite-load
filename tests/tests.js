@@ -1,3 +1,8 @@
+import { Meteor } from 'meteor/meteor';
+import { Mongo } from 'meteor/mongo';
+import { Tinytest } from "meteor/tinytest";
+import { InfiniLoad } from "meteor/zodiase:infinite-load";
+
 // Collection used for testing.
 const dataCollection = new Mongo.Collection('test');
 
@@ -38,7 +43,7 @@ if (Meteor.isServer) {
     dataCollection.remove({});
     test.ok();
   });
-  
+
   Meteor.methods({
     'newlib': (options) => {
       check(options, Object);
@@ -92,7 +97,7 @@ Tinytest.add('Basics - Multiple Identical Instantiations throw', function (test)
     verbose: true
   });
   saveInstance(id, inst);
-  
+
   test.throws(function () {
     const inst = new lib(dataCollection, {
       id,
@@ -104,7 +109,7 @@ Tinytest.add('Basics - Multiple Identical Instantiations throw', function (test)
 if (Meteor.isClient) {
   //! For debugging only.
   window.Meteor = Meteor;
-  
+
   Tinytest.addAsync('Basics - Client side methods', function (test, next) {
     const onLibReady = (error, result) => {
       if (error) {

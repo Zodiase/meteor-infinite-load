@@ -1,3 +1,7 @@
+import { Meteor } from 'meteor/meteor';
+import { check, Match } from 'meteor/check';
+import { InfiniLoadBase } from './base.js';
+
 /**
  * Server side interface for loading collection data incrementally.
  * @extends InfiniLoadBase
@@ -359,4 +363,4 @@ InfiniLoadServer._CONST = _.extend({}, InfiniLoadBase._CONST, /** @lends InfiniL
 InfiniLoadServer._DATA = _.extend({}, InfiniLoadBase._DATA, /** @lends InfiniLoadServer._DATA */{
 });
 
-module.exports = InfiniLoadServer;
+export const InfiniLoad = InfiniLoadServer;

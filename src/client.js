@@ -1,3 +1,10 @@
+import { Meteor } from 'meteor/meteor';
+import { Mongo } from 'meteor/mongo';
+import { Blaze } from 'meteor/blaze';
+import { Tracker } from 'meteor/tracker';
+import { check, Match } from 'meteor/check';
+import { InfiniLoadBase } from './base.js';
+
 /**
  * Client side interface for loading collection data incrementally.
  * @extends InfiniLoadBase
@@ -606,4 +613,4 @@ InfiniLoadClient._DATA = _.extend({}, InfiniLoadBase._DATA, /** @lends InfiniLoa
   collections: new Map()
 });
 
-module.exports = InfiniLoadClient;
+export const InfiniLoad = InfiniLoadClient;
