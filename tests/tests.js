@@ -54,12 +54,6 @@ if (Meteor.isServer) {
       console.log('new lib ready', options.id);
       return options.id;
     },
-    'publish' (name) {
-      Meteor.publish(name, function () {
-        this.ready();
-      });
-      return name;
-    },
     'insert' (doc) {
       check(doc, Object);
       delete doc._id;
@@ -118,7 +112,7 @@ if (Meteor.isClient) {
   //! For debugging only.
   window.Meteor = Meteor;
 
-  Tinytest.addAsync('Basics - Client side methods', function (test, next) {
+  Tinytest.addAsync('Basics - client side methods', function (test, next) {
     const onLibReady = (error, result) => {
       if (error) {
         throw error;
@@ -155,7 +149,7 @@ if (Meteor.isClient) {
     Meteor.call('newlib', {}, onLibReady);
   });
 
-  Tinytest.addAsync('Basics - Client side properties', function (test, next) {
+  Tinytest.addAsync('Basics - client side properties', function (test, next) {
     const onLibReady = (error, result) => {
       if (error) {
         throw error;
@@ -180,7 +174,7 @@ if (Meteor.isClient) {
     Meteor.call('newlib', {}, onLibReady);
   });
 
-  Tinytest.addAsync('APIs - State before starting', function (test, next) {
+  Tinytest.addAsync('APIs - state before starting', function (test, next) {
     const onLibReady = (error, result) => {
       if (error) {
         throw error;
@@ -204,29 +198,8 @@ if (Meteor.isClient) {
     Meteor.call('newlib', {}, onLibReady);
   });
 
-/*
-  Tinytest.addAsync('APIs - Dynamic publishing', function (test, next) {
-    const name = 'foobar';
-    const onPubReady = (error, result) => {
-      console.log('onPubReady');
-      if (error) {
-        throw error;
-      }
-      const name = result;
-      Meteor.subscribe(name, function () {
-        console.log('sub ready');
-      });
-      test.ok();
-//       next();
-    };
-    Meteor.call('publish', name, onPubReady);
-    console.log('called');
-  });
-*/
-
-  Tinytest.addAsync('APIs - Subscribe', function (test, next) {
+  Tinytest.addAsync('APIs - subscribe', function (test, next) {
     const onLibReady = (error, result) => {
-      console.log('onLibReady');
       if (error) {
         throw error;
       }
@@ -236,14 +209,13 @@ if (Meteor.isClient) {
         verbose: true
       });
 
-      //! Somehow start immediately after instantiation does not work.
-      inst.start();
-      window.inst = inst;
-      test.ok();
-//       next();
+      inst.start().ready(() => {
+        inst.stop();
+        test.ok();
+        next();
+      });
     };
     Meteor.call('newlib', {}, onLibReady);
-    console.log('called');
   });
 
 }

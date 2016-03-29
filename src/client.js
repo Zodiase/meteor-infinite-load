@@ -57,15 +57,20 @@ class InfiniLoadClient extends InfiniLoadBase {
      */
     me._started = false;
     /**
-     * Reactive store of the current request Id.
-     * Every time any of the request parameters changes and results in a new subscription,
-     *     a new request ID is generated and used.
-     * Subscription autoruns should monitor this for re-runs.
+     * Store the current request ID.
      * This value should be initialized by `.start()`.
      * @private
      * @type {String}
      */
-    me._requestId = new ReactiveVar(null);
+    me._requestId = '';
+    /**
+     * Store the last request ID received from the stats document.
+     * This value is used for checking if the request ID in the stats document has been changed.
+     * This value should be initialized by `.start()`.
+     * @private
+     * @type {String}
+     */
+    me._lastReceivedRequestId = '';
     /**
      * Runtime data representing how many documents are requested from server.
      * This value should be initialized by `.start()`.
@@ -118,11 +123,11 @@ class InfiniLoadClient extends InfiniLoadBase {
      */
     me._computations = {};
     /**
-     * Store subscriptions.
+     * Store the active subscription.
      * @private
-     * @type {Object.<String, Object>}
+     * @type {Object}
      */
-    me._subscriptions = {};
+    me._subscription = null;
     /**
      * The dedicated collection storing data for this InfiniLoad instance, including the stats document.
      * @private
@@ -371,21 +376,14 @@ class InfiniLoadClient extends InfiniLoadBase {
    */
   _newRequest () {
     const newRequestDocument = {
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      params: null,
+      startAt: 0,
+      readyAt: 0,
+      onReady: []
     };
     const newRequestId = this._requestDocuments.insert(newRequestDocument);
     return newRequestId;
-  }
-
-  /**
-   * Helper function for creating a new request document and apply its ID to trigger autoruns.
-   * @returns {String}
-   *          The ID of the new request.
-   */
-  _useNewRequest () {
-    const requestId = this._newRequest();
-    this._requestId.set(requestId);
-    return requestId;
   }
 
   /**
@@ -403,6 +401,42 @@ class InfiniLoadClient extends InfiniLoadBase {
         params
       }
     });
+  }
+
+  /**
+   * Helper function for adding a callback function to be called when the request is ready.
+   * @private
+   * @param {String} requestId
+   * @param {Function} callback
+   */
+  _registerRequestReadyCallback (requestId, callback) {
+    check(requestId, String);
+    check(callback, Function);
+
+    this._requestDocuments.update(requestId, {
+      $push: {
+        onReady: callback
+      }
+    });
+  }
+
+  /**
+   * Helper function for triggering all ready callback functions for the request.
+   * @private
+   * @param {String} requestId
+   */
+  _triggerRequestReadyCallbacks (requestId) {
+    check(requestId, String);
+
+    const requestDoc = this._requestDocuments.findOne(requestId);
+    if (!requestDoc) {
+      return;
+    }
+
+    const callbacks = requestDoc.onReady || [];
+    for (let cb of callbacks) {
+      cb();
+    }
   }
 
   /**
@@ -449,25 +483,40 @@ class InfiniLoadClient extends InfiniLoadBase {
     });
   }
 
+  /**
+   * Callback when a subscription call returns.
+   * @private
+   */
   _onSubscriptionReady (requestId) {
     this._log('subscription ready');
     this._markRequestReady(requestId);
   }
 
   /**
-   * Update the subscription when the request ID changes.
-   * Reacts to `this._requestId`.
-   * @private
+   * @typedef {Object} InfiniLoadClient~ActionHandle
+   * @property {Function} ready
+   *           Pass a callback to be executed when the action is ready.
    */
-  _subscriptionAutorun (comp) {
-    const requestId = this._requestId.get();
 
-    if (!requestId) {
-      this._log('void subscription autorun', requestId);
-      return;
-    }
+  /**
+   * Helper function for generating action handles.
+   * @private
+   * @param {String} requestId
+   * @returns {InfiniLoadClient~ActionHandle}
+   */
+  _getActionHandle (requestId) {
+    return {
+      ready: this._registerRequestReadyCallback.bind(this, requestId)
+    };
+  }
 
-    this._log('subscription autorun', requestId);
+  /**
+   * Use the latest parameters to start a new subscription.
+   * @private
+   * @returns {InfiniLoadClient~ActionHandle}
+   */
+  _newSubscription () {
+    const requestId = this._requestId = this._newRequest();
 
     /**
      * @typedef {Object} InfiniLoadServer~SubscribeOptions
@@ -487,16 +536,40 @@ class InfiniLoadClient extends InfiniLoadBase {
       limit: this._findLimit,
       lastLoadTime: this._lastLoadTime
     };
-
     this._log('subscribe', parameters);
     this._saveRequestParameters(requestId, parameters);
     this._markRequestStart(requestId);
-    this._subscriptions['content'] = this._subscribe(this.collectionName, parameters, this._onSubscriptionReady.bind(this, requestId));
+    this._subscription = this._subscribe(this.collectionName, parameters, this._onSubscriptionReady.bind(this, requestId));
+
+    return this._getActionHandle(requestId);
+  }
+
+  /**
+   * Autorun for checking what requests are ready.
+   * It keeps fetching the stats document, from which it gets the latest request ID
+   *     and triggers its callbacks.
+   * @private
+   */
+  _checkRequestReadyAutorun (comp) {
+    const stats = this.stats;
+    if (!stats) {
+      return;
+    }
+    const requestId = stats.requestId;
+    if (requestId === this._lastReceivedRequestId) {
+      return;
+    }
+
+    this._lastReceivedRequestId = requestId;
+
+    // Trigger callbacks outside of the autorun to avoid issues with Tracker.
+    Meteor._setImmediate(this._triggerRequestReadyCallbacks.bind(this, requestId));
   }
 
   /**
    * Start all the automations. If a template instance is provided, all the automations will be attached to it so they will be terminated automatically.
    * @param {Blaze.TemplateInstance} [template]
+   * @returns {InfiniLoadClient~ActionHandle}
    */
   start (template) {
     check(template, Match.Optional(Blaze.TemplateInstance));
@@ -510,7 +583,8 @@ class InfiniLoadClient extends InfiniLoadBase {
     this._started = true;
 
     // Initialize variables.
-    this._requestId.set(null);
+    this._requestId = '';
+    this._lastReceivedRequestId = '';
     this._findLimit = this._initialLimit;
     this._lastLoadTime = 0;
     this._requestDocuments.remove({});
@@ -525,10 +599,13 @@ class InfiniLoadClient extends InfiniLoadBase {
       this._subscribe = Meteor.subscribe.bind(Meteor);
     }
 
-    this._computations['subscription'] = this._autorun(this._subscriptionAutorun.bind(this));
-    this._useNewRequest();
+    this._computations['checkRequestReady'] = this._autorun(this._checkRequestReadyAutorun.bind(this));
+
+    const handle = this._newSubscription();
 
     this._log('started');
+
+    return handle;
   }
 
   /**
@@ -549,17 +626,17 @@ class InfiniLoadClient extends InfiniLoadBase {
       }
     }
     // Stop all subscriptions.
-    for (let name of Object.keys(this._subscriptions)) {
-      let sub = this._subscriptions[name];
+    if (this._subscription) {
       // It's OK to call `stop` multiple times.
-      sub.stop();
+      this._subscription.stop();
     }
 
     // Reset variables.
     delete this._autorun;
     delete this._subscribe;
 
-    this._requestId.set(null);
+    this._requestId = '';
+    this._lastReceivedRequestId = '';
     this._findLimit = this._initialLimit;
     this._lastLoadTime = 0;
     this._requestDocuments.remove({});
