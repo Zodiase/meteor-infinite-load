@@ -588,20 +588,45 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Load more old documents from server.
+   * If this called before starting, an error will be thrown.
    * @param {Number} [amount]
    *        The amount to load. If omitted, the default amount would be used.
-   *! @returns {Object} An interface to add `onReady` handlers to this specific action.
+   * @returns {InfiniLoadClient~ActionHandle}
    */
-  loadMore (amount) {}
+  loadMore (amount) {
+    //!
+  }
 
   /**
    * Load all new documents from server.
+   * If this called before starting, an error will be thrown.
+   * @returns {InfiniLoadClient~ActionHandle}
    */
-  loadNew () {}
+  loadNew () {
+    if (!this._runtime.started) {
+      throw new Error('InfiniLoadClient ' + this.collectionName + ' has not started. Can not call `.loadNew()`.');
+    }
 
-  setServerParameters () {}
+    this._log('loadNew');
 
-  getServerParameters () {}
+    const stats = Tracker.nonreactive(() => this.stats);
+
+    // 1. Set last load time to the latest document time.
+    // 2. Increase the load limit to include all new documents.
+
+    this._runtime.lastLoadTime = stats.latestDocTime;
+    this._runtime.findLimit = stats.loadedDocCount + stats.newDocCount;
+
+    return self._newSubscription(this);
+  }
+
+  setServerParameters () {
+    //!
+  }
+
+  getServerParameters () {
+    //!
+  }
 
   /**
    * Attach an event handler function for one or more events.
@@ -713,12 +738,12 @@ class InfiniLoadClient extends InfiniLoadBase {
   /**
    * Force a new subscription with the current settings.
    * This is used to wait for previous server updates to propagate to client.
-   * If this called before starting, `null` will be returned.
-   * @returns {InfiniLoadClient~ActionHandle|null}
+   * If this called before starting, an error will be thrown.
+   * @returns {InfiniLoadClient~ActionHandle}
    */
   sync () {
     if (!this._runtime.started) {
-      return null;
+      throw new Error('InfiniLoadClient ' + this.collectionName + ' has not started. Can not call `.sync()`.');
     }
 
     this._log('sync');
