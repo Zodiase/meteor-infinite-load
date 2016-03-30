@@ -633,7 +633,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    *        The amount to load. If omitted, the default amount would be used.
    * @returns {InfiniLoadClient~ActionHandle}
    */
-  loadMore (amount) {
+  loadMore (amount = 0) {
     check(amount, Number);
 
     if (!this.started) {
