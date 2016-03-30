@@ -634,7 +634,21 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @returns {InfiniLoadClient~ActionHandle}
    */
   loadMore (amount) {
-    //!
+    check(amount, Number);
+
+    if (!this.started) {
+      throw new Error('InfiniLoadClient ' + this.collectionName + ' has not started. Can not call `.loadMore()`.');
+    }
+
+    this._log('loadMore', amount);
+
+    const stats = Tracker.nonreactive(() => this.stats);
+
+    // Increase the load limit to include more old documents but does not exceed.
+
+    this._runtime.findLimit += Math.min(stats.loadedDocCount + (amount || this._limitIncrement), stats.oldDocCount);
+
+    return self._newSubscription(this);
   }
 
   /**
