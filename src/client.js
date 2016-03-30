@@ -646,7 +646,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
     // Increase the load limit to include more old documents but does not exceed.
 
-    this._runtime.findLimit += Math.min(stats.loadedDocCount + (amount || this._limitIncrement), stats.oldDocCount);
+    this._runtime.findLimit = Math.min(stats.loadedDocCount + (amount || this._limitIncrement), stats.oldDocCount);
 
     return self._newSubscription(this);
   }
