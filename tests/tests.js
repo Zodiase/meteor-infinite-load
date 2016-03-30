@@ -54,6 +54,24 @@ if (Meteor.isServer) {
       console.log('new lib ready', options.id);
       return options.id;
     },
+    'prepareData' (amount, secret) {
+      check(amount, Number);
+      check(secret, String);
+
+      // Remove existing data to ensure the count is accurate.
+      dataCollection.remove({
+        secret
+      });
+
+      for (let i = 0; i < amount; ++i) {
+        dataCollection.insert({
+          secret,
+          createTime: Date.now()
+        });
+      }
+
+      return amount;
+    },
     'insert' (docs) {
       if (!Array.isArray(docs)) {
         docs = [docs];
@@ -124,9 +142,8 @@ if (Meteor.isClient) {
 
   const initialLoadLimit = 3;
   const loadIncrement = 5;
-
-  let globalInst = null;
-  let globalTestItems = [];
+  const oldItemCount = 37;
+  const newItemCount = 7;
 
   Tinytest.addAsync('Basics - client side methods', function (test, next) {
     const onLibReady = (error, result) => {
@@ -164,6 +181,7 @@ if (Meteor.isClient) {
 
       next();
     };
+
     Meteor.call('newlib', {}, onLibReady);
   });
 
@@ -191,11 +209,11 @@ if (Meteor.isClient) {
 
       next();
     };
+
     Meteor.call('newlib', {}, onLibReady);
   });
 
-  Tinytest.addAsync('APIs - initialize', function (test, next) {
-
+  Tinytest.addAsync('APIs - test state before starting', function (test, next) {
     const libOptions = {
       initialLimit: initialLoadLimit,
       limitIncrement: loadIncrement
@@ -206,136 +224,336 @@ if (Meteor.isClient) {
         throw error;
       }
 
+      // Server side is ready.
+
       const id = result;
-      globalInst = new lib(dataCollection, {
+
+      // Instantiate client side.
+      const inst = new lib(dataCollection, {
         id,
         verbose: true,
         ...libOptions
       });
 
-      //!
-      window.inst = globalInst;
-
-      test.ok();
+      // Check state before starting.
+      test.equal(inst.find({}).count(), 0);
+      test.equal(typeof inst.findOne({}), 'undefined');
+      test.equal(inst.count(), 0);
+      test.equal(inst.countMore(), 0);
+      test.equal(inst.countNew(), 0);
+      test.equal(inst.countTotal(), 0);
+      test.equal(inst.hasMore(), false);
+      test.equal(inst.hasNew(), false);
 
       next();
     };
+
     Meteor.call('newlib', libOptions, onLibReady);
   });
 
-  Tinytest.addAsync('APIs - prepare data', function (test, next) {
-    const items = globalTestItems = [];
-
-    for (let i = 0; i < (initialLoadLimit + loadIncrement * 17); ++i) {
-      items.push({
-        secret: Meteor.uuid()
-      });
-    }
-
-    const onInsertReady = (error, result) => {
-      if (error) {
-        throw error;
-      }
-
-      const itemIds = result;
-      test.equal(itemIds.length, items.length);
-
-      next();
+  Tinytest.addAsync('APIs - test start, stop and ready cycle', function (test, next) {
+    const libOptions = {
+      initialLimit: initialLoadLimit,
+      limitIncrement: loadIncrement
     };
-    Meteor.call('insert', items, onInsertReady);
-  });
 
-  Tinytest.add('APIs - state before starting', function (test) {
-    const inst = globalInst;
-
-    test.equal(inst.find({}).count(), 0);
-    test.equal(typeof inst.findOne({}), 'undefined');
-    test.equal(inst.count(), 0);
-    test.equal(inst.countMore(), 0);
-    test.equal(inst.countNew(), 0);
-    test.equal(inst.countTotal(), 0);
-    test.equal(inst.hasMore(), false);
-    test.equal(inst.hasNew(), false);
-  });
-
-  Tinytest.addAsync('APIs - subscribe, add new and state', function (test, next) {
-    const inst = globalInst;
-
-    const newItems = [];
-
-    // Use loadIncrement for new item count.
-    for (let i = 0; i < loadIncrement; ++i) {
-      newItems.push({
-        secret: Meteor.uuid()
-      });
-    }
-
-    const onInsertReady = (error, result) => {
+    const onLibReady = (error, result) => {
       if (error) {
         throw error;
       }
 
-      const itemIds = result;
-      test.equal(itemIds.length, newItems.length);
+      // Server side is ready.
 
-      // Test `.sync()` and `.countNew()`.
-      inst.sync().ready(() => {
-        test.equal(inst.find({}).count(), inst.limit);
-        test.equal(inst.count(), inst.limit);
-        test.equal(inst.countMore(), inst.countTotal() - inst.countNew() - inst.count());
-        test.equal(inst.countNew(), newItems.length);
-        test.equal(inst.countTotal(), globalTestItems.length + newItems.length);
-        test.equal(inst.hasMore(), globalTestItems.length > inst.limit);
-        test.equal(inst.hasNew(), newItems.length > 0);
+      const id = result;
 
-        const limitBeforeLoadNew = inst.limit;
+      // Instantiate client side.
+      const inst = new lib(dataCollection, {
+        id,
+        verbose: true,
+        ...libOptions
+      });
 
-        // Test `.loadNew()`.
-        inst.loadNew().ready(() => {
-          test.equal(inst.limit, limitBeforeLoadNew + newItems.length);
-          test.equal(inst.find({}).count(), inst.limit);
-          test.equal(inst.count(), inst.limit);
-          test.equal(inst.countMore(), inst.countTotal() - inst.countNew() - inst.count());
+      inst.start().ready(() => {
+        test.ok();
+
+        inst.stop().ready(next);
+      });
+    };
+
+    Meteor.call('newlib', libOptions, onLibReady);
+  });
+
+  Tinytest.addAsync('APIs - test stats after started', function (test, next) {
+    const secret = Meteor.uuid();
+
+    Meteor.call('prepareData', oldItemCount, secret, (error, result) => {
+      if (error) {
+        throw error;
+      }
+
+      const libOptions = {
+        initialLimit: initialLoadLimit,
+        limitIncrement: loadIncrement,
+        selector: {
+          secret
+        }
+      };
+      Meteor.call('newlib', libOptions, (error, result) => {
+        if (error) {
+          throw error;
+        }
+
+        // Server side is ready.
+
+        const id = result;
+
+        // Instantiate client side.
+        const inst = new lib(dataCollection, {
+          id,
+          verbose: true,
+          ...libOptions
+        });
+
+        inst.start().ready(() => {
+          test.equal(inst.find({}).count(), initialLoadLimit);
+          test.equal(inst.count(), initialLoadLimit);
+          test.equal(inst.limit, initialLoadLimit);
+          test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
           test.equal(inst.countNew(), 0);
-          test.equal(inst.countTotal(), globalTestItems.length + newItems.length);
-          test.equal(inst.hasMore(), (globalTestItems.length + newItems.length) > inst.limit);
+          test.equal(inst.countTotal(), oldItemCount);
+          test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
           test.equal(inst.hasNew(), false);
 
           inst.stop().ready(next);
         });
       });
-    };
+    });
+  });
 
-    // Test `.start()` and `.ready()`.
-    inst.start().ready(() => {
-      test.equal(inst.find({}).count(), inst.limit);
-      test.equal(inst.count(), inst.limit);
-      test.equal(inst.countMore(), inst.countTotal() - inst.countNew() - inst.count());
-      test.equal(inst.countNew(), 0);
-      test.equal(inst.countTotal(), globalTestItems.length);
-      test.equal(inst.hasMore(), globalTestItems.length > inst.limit);
-      test.equal(inst.hasNew(), false);
+  Tinytest.addAsync('APIs - test `.loadMore()`', function (test, next) {
+    const secret = Meteor.uuid();
 
-      Meteor.call('insert', newItems, onInsertReady);
+    Meteor.call('prepareData', oldItemCount, secret, (error, result) => {
+      if (error) {
+        throw error;
+      }
+
+      const libOptions = {
+        initialLimit: initialLoadLimit,
+        limitIncrement: loadIncrement,
+        selector: {
+          secret
+        }
+      };
+
+      Meteor.call('newlib', libOptions, (error, result) => {
+        if (error) {
+          throw error;
+        }
+
+        // Server side is ready.
+
+        const id = result;
+
+        // Instantiate client side.
+        const inst = new lib(dataCollection, {
+          id,
+          verbose: true,
+          ...libOptions
+        });
+
+        inst.start().ready(() => {
+          inst.loadMore().ready(() => {
+            test.equal(inst.find({}).count(), initialLoadLimit + loadIncrement);
+            test.equal(inst.count(), initialLoadLimit + loadIncrement);
+            test.equal(inst.limit, initialLoadLimit + loadIncrement);
+            test.equal(inst.countMore(), oldItemCount - (initialLoadLimit + loadIncrement));
+            test.equal(inst.countNew(), 0);
+            test.equal(inst.countTotal(), oldItemCount);
+            test.equal(inst.hasMore(), oldItemCount > (initialLoadLimit + loadIncrement));
+            test.equal(inst.hasNew(), false);
+
+            inst.stop().ready(next);
+          });
+        });
+      });
+    });
+  });
+
+  Tinytest.addAsync('APIs - test stats after added new', function (test, next) {
+    const secret = Meteor.uuid();
+
+    Meteor.call('prepareData', oldItemCount, secret, (error, result) => {
+      if (error) {
+        throw error;
+      }
+
+      const libOptions = {
+        initialLimit: initialLoadLimit,
+        limitIncrement: loadIncrement,
+        selector: {
+          secret
+        }
+      };
+
+      Meteor.call('newlib', libOptions, (error, result) => {
+        if (error) {
+          throw error;
+        }
+
+        // Server side is ready.
+
+        const id = result;
+
+        // Instantiate client side.
+        const inst = new lib(dataCollection, {
+          id,
+          verbose: true,
+          ...libOptions
+        });
+
+        inst.start().ready(() => {
+
+          const newItems = [];
+
+          // Use loadIncrement for new item count.
+          for (let i = 0; i < newItemCount; ++i) {
+            newItems.push({
+              secret
+            });
+          }
+
+          Meteor.call('insert', newItems, (error, result) => {
+            if (error) {
+              throw error;
+            }
+
+            inst.sync().ready(() => {
+              test.equal(inst.find({}).count(), initialLoadLimit);
+              test.equal(inst.count(), initialLoadLimit);
+              test.equal(inst.limit, initialLoadLimit);
+              test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
+              test.equal(inst.countNew(), newItemCount);
+              test.equal(inst.countTotal(), oldItemCount + newItemCount);
+              test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
+              test.equal(inst.hasNew(), newItemCount > 0);
+
+              inst.stop().ready(next);
+            });
+          });
+        });
+      });
+    });
+  });
+
+  Tinytest.addAsync('APIs - test `.loadNew()`', function (test, next) {
+    const secret = Meteor.uuid();
+
+    Meteor.call('prepareData', oldItemCount, secret, (error, result) => {
+      if (error) {
+        throw error;
+      }
+
+      const libOptions = {
+        initialLimit: initialLoadLimit,
+        limitIncrement: loadIncrement,
+        selector: {
+          secret
+        }
+      };
+
+      Meteor.call('newlib', libOptions, (error, result) => {
+        if (error) {
+          throw error;
+        }
+
+        // Server side is ready.
+
+        const id = result;
+
+        // Instantiate client side.
+        const inst = new lib(dataCollection, {
+          id,
+          verbose: true,
+          ...libOptions
+        });
+
+        inst.start().ready(() => {
+
+          const newItems = [];
+
+          // Use loadIncrement for new item count.
+          for (let i = 0; i < newItemCount; ++i) {
+            newItems.push({
+              secret
+            });
+          }
+
+          Meteor.call('insert', newItems, (error, result) => {
+            if (error) {
+              throw error;
+            }
+
+            inst.sync().ready(() => {
+
+              inst.loadNew().ready(() => {
+                test.equal(inst.find({}).count(), initialLoadLimit + newItemCount);
+                test.equal(inst.count(), initialLoadLimit + newItemCount);
+                test.equal(inst.limit, initialLoadLimit + newItemCount);
+                test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
+                test.equal(inst.countNew(), 0);
+                test.equal(inst.countTotal(), oldItemCount + newItemCount);
+                test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
+                test.equal(inst.hasNew(), false);
+
+                inst.stop().ready(next);
+              });
+            });
+          });
+        });
+      });
     });
   });
 
   Tinytest.addAsync('APIs - subscribe, sync and test global ready events', function (test, next) {
-    const inst = globalInst;
+    const libOptions = {
+      initialLimit: initialLoadLimit,
+      limitIncrement: loadIncrement
+    };
 
-    let readyCount = 0;
-    inst.on('ready', () => {
-      readyCount += 1;
-    });
+    Meteor.call('newlib', libOptions, (error, result) => {
+      if (error) {
+        throw error;
+      }
 
-    inst.start().ready(() => {
-      test.equal(readyCount, 0);
+      // Server side is ready.
 
-      inst.sync().ready(() => {
-        test.equal(readyCount, 1);
+      const id = result;
 
-        inst.stop().ready(next);
+      // Instantiate client side.
+      const inst = new lib(dataCollection, {
+        id,
+        verbose: true,
+        ...libOptions
+      });
+
+      let readyCount = 0;
+      inst.on('ready', () => {
+        readyCount += 1;
+      });
+
+      inst.start().ready(() => {
+        test.equal(readyCount, 0);
+
+        inst.sync().ready(() => {
+          test.equal(readyCount, 1);
+
+          inst.stop().ready(next);
+        });
       });
     });
+
+
   });
+
 }
