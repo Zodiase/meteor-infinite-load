@@ -75,6 +75,8 @@ class InfiniLoadServer extends InfiniLoadBase {
     super(collection, options);
     const me = this;
 
+    me._log('construct', options);
+
     /*
      * Launch sequence:
      *   - Check parameters.
@@ -154,10 +156,16 @@ class InfiniLoadServer extends InfiniLoadBase {
       findSort[timeFieldName] = -1;
       const findFields = getFindFields(userId, serverArgs);
 
-      const cursor = collection.find(findSelector, {
+      const findOptions = {
         'sort': findSort,
         'fields': findFields
-      });
+      };
+
+      me._log('find', findSelector, findOptions);
+
+      const cursor = collection.find(findSelector, findOptions);
+
+      me._log('find.count', cursor.count());
 
       let latestDocTime = 0,
           totalDocCount = 0,
