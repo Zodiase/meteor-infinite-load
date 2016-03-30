@@ -674,12 +674,28 @@ class InfiniLoadClient extends InfiniLoadBase {
     return self._newSubscription(this);
   }
 
-  setServerParameters () {
-    //!
+  /**
+   * Set the parameters sent to the server side.
+   * If used before started, returns null instead of the action handle.
+   * @param {Object} data
+   * @returns {InfiniLoadClient~ActionHandle|null}
+   */
+  setServerParameters (data) {
+    check(data, Object);
+
+    _.extendOwn(this._serverArgs, data);
+
+    return !this.started ? null : self._newSubscription(this);
   }
 
+  /**
+   * Get the parameters sent to the server side.
+   * The data returned is the cached copy at the client side. It is not
+   *     guaranteed to have been received by the server yet.
+   * @returns {Object}
+   */
   getServerParameters () {
-    //!
+    return this._serverArgs;
   }
 
   /**
