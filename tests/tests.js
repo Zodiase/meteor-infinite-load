@@ -156,6 +156,7 @@ if (Meteor.isClient) {
         id,
         verbose: true
       });
+      saveInstance(id, inst);
 
       const methodNames = [
         'find',
@@ -196,6 +197,7 @@ if (Meteor.isClient) {
         id,
         verbose: true
       });
+      saveInstance(id, inst);
 
       const properties = {
         'originalCollection': Mongo.Collection,
@@ -234,6 +236,7 @@ if (Meteor.isClient) {
         verbose: true,
         ...libOptions
       });
+      saveInstance(id, inst);
 
       // Check state before starting.
       test.equal(inst.find({}).count(), 0);
@@ -272,6 +275,7 @@ if (Meteor.isClient) {
         verbose: true,
         ...libOptions
       });
+      saveInstance(id, inst);
 
       inst.start().ready(() => {
         test.ok();
@@ -313,6 +317,7 @@ if (Meteor.isClient) {
           verbose: true,
           ...libOptions
         });
+        saveInstance(id, inst);
 
         inst.start().ready(() => {
           test.equal(inst.find({}).count(), initialLoadLimit);
@@ -361,6 +366,7 @@ if (Meteor.isClient) {
           verbose: true,
           ...libOptions
         });
+        saveInstance(id, inst);
 
         inst.start().ready(() => {
           inst.loadMore().ready(() => {
@@ -411,6 +417,7 @@ if (Meteor.isClient) {
           verbose: true,
           ...libOptions
         });
+        saveInstance(id, inst);
 
         inst.start().ready(() => {
 
@@ -477,6 +484,7 @@ if (Meteor.isClient) {
           verbose: true,
           ...libOptions
         });
+        saveInstance(id, inst);
 
         inst.start().ready(() => {
 
@@ -515,7 +523,7 @@ if (Meteor.isClient) {
     });
   });
 
-  Tinytest.addAsync('APIs - subscribe, sync and test global ready events', function (test, next) {
+  Tinytest.addAsync('APIs - test sync and global ready events', function (test, next) {
     const libOptions = {
       initialLimit: initialLoadLimit,
       limitIncrement: loadIncrement
@@ -536,6 +544,7 @@ if (Meteor.isClient) {
         verbose: true,
         ...libOptions
       });
+      saveInstance(id, inst);
 
       let readyCount = 0;
       inst.on('ready', () => {
@@ -552,8 +561,48 @@ if (Meteor.isClient) {
         });
       });
     });
-
-
   });
 
+  Tinytest.addAsync('APIs - test setting and getting server parameters', function (test, next) {
+    const libOptions = {
+      initialLimit: initialLoadLimit,
+      limitIncrement: loadIncrement
+    };
+
+    Meteor.call('newlib', libOptions, (error, result) => {
+      if (error) {
+        throw error;
+      }
+
+      // Server side is ready.
+
+      const id = result;
+
+      // Instantiate client side.
+      const inst = new lib(dataCollection, {
+        id,
+        verbose: true,
+        ...libOptions
+      });
+      saveInstance(id, inst);
+
+      inst.start().ready(() => {
+        const secret = {
+          secret: Meteor.uuid()
+        };
+
+        inst.setServerParameters(secret).ready(() => {
+          test.equal(inst.getServerParameters(), secret);
+
+          inst.stop().ready(next);
+        });
+      });
+    });
+  });
+
+  Tinytest.add('Finishing - make sure all instances are stopped', function (test) {
+    instances.forEach((inst) => {
+      test.equal(inst.started, false);
+    });
+  });
 }

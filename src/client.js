@@ -1,4 +1,5 @@
 import { Meteor } from 'meteor/meteor';
+import { _ } from 'meteor/underscore';
 import { Mongo } from 'meteor/mongo';
 import { Blaze } from 'meteor/blaze';
 import { Tracker } from 'meteor/tracker';
@@ -417,7 +418,7 @@ class InfiniLoadClient extends InfiniLoadBase {
     check(instance, self);
     check(quit, Boolean);
 
-    const requestId = instance._runtime.requestId = self._newRequest(instance);
+    const requestId = self._newRequest(instance);
 
     /**
      * @typedef {Object} InfiniLoadServer~SubscribeOptions
@@ -442,13 +443,18 @@ class InfiniLoadClient extends InfiniLoadBase {
     };
     instance._log('new request', requestId, parameters);
     self._saveRequestParameters(instance, requestId, parameters);
-    self._markRequestStart(instance, requestId);
 
-    if (instance._runtime.subscription) {
-      instance._runtime.subscription.stop();
-      instance._runtime.subscription = null;
+    if (instance._runtime.running) {
+      self._markRequestStart(instance, requestId);
+
+      if (instance._runtime.subscription) {
+        instance._runtime.subscription.stop();
+        instance._runtime.subscription = null;
+      }
+      instance._runtime.subscription = instance._subscribe(instance.collectionName, parameters, self._onSubscriptionReady.bind(instance, requestId));
+
+      instance._runtime.requestId = requestId;
     }
-    instance._runtime.subscription = instance._subscribe(instance.collectionName, parameters, self._onSubscriptionReady.bind(instance, requestId));
 
     return self._getActionHandle(instance, requestId);
   }
@@ -676,26 +682,28 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Set the parameters sent to the server side.
-   * If used before started, returns null instead of the action handle.
+   * If used before starting, registering any ready callbacks will not take effect.
    * @param {Object} data
-   * @returns {InfiniLoadClient~ActionHandle|null}
+   * @returns {InfiniLoadClient~ActionHandle}
    */
   setServerParameters (data) {
     check(data, Object);
 
-    _.extendOwn(this._serverArgs, data);
+    _.extend(this._serverArgs, data);
 
-    return !this.started ? null : self._newSubscription(this);
+    return self._newSubscription(this);
   }
 
   /**
-   * Get the parameters sent to the server side.
-   * The data returned is the cached copy at the client side. It is not
-   *     guaranteed to have been received by the server yet.
+   * Get the last parameters received by the server.
+   * The data returned is not necessarily the same as the value just set since
+   *     the value may not have been received by the server yet.
+   * A reactive data source.
    * @returns {Object}
    */
   getServerParameters () {
-    return this._serverArgs;
+    const stats = this.stats;
+    return (!stats) ? null : stats.serverArgs;
   }
 
   /**

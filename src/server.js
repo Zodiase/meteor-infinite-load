@@ -201,6 +201,8 @@ class InfiniLoadServer extends InfiniLoadBase {
          *           The final fields object used in find.
          * @property {Number} limit
          *           The find limit.
+         * @property {Object} serverArgs
+         *           A copy of the server parameters received from client.
          */
         return {
           subscriptionId,
@@ -214,7 +216,8 @@ class InfiniLoadServer extends InfiniLoadBase {
           selector: findSelector,
           sort: findSort,
           fields: findFields,
-          limit: findLimit
+          limit: findLimit,
+          serverArgs
         };
       }
 
