@@ -136,7 +136,10 @@ InfiniLoadBase._CONST = {
   COLLECTION_NAMESPACE: '__InfiniLoad',
   NAMESPACE_DELIMITER: '/',
   STATS_DOCUMENT_ID: 0,
-  OP_NOOP: () => {}
+  OP_NOOP: () => {},
+  OP_RETURN_THIS: function () {
+    return this;
+  }
 };
 
 /**

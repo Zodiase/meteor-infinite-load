@@ -345,9 +345,6 @@ const self = InfiniLoadServer;
  * @type {Object}
  */
 InfiniLoadServer._CONST = _.extend({}, InfiniLoadBase._CONST, /** @lends InfiniLoadServer._CONST */{
-  OP_RETURN_THIS: function () {
-    return this;
-  },
   CONSTRUCT_OPTIONS_PATTERN: Match.ObjectIncluding({
     'selector': Match.Optional(Match.OneOf(Object, Function)),
     'sort': Match.Optional(Match.OneOf(Object, Function)),

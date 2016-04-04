@@ -226,7 +226,7 @@ class InfiniLoadClient extends InfiniLoadBase {
       startAt: 0,
       confirmedAt: 0,
       readyAt: 0,
-      onReady: []
+      promise: null
     };
     const newRequestId = instance._requestDocuments.insert(newRequestDocument);
     return newRequestId;
@@ -268,58 +268,6 @@ class InfiniLoadClient extends InfiniLoadBase {
   }
 
   /**
-   * Helper function for adding a callback function to be called when the request is ready.
-   * Never use directly and always use `.bind()` to set `this`.
-   * @private
-   * @param {String} requestId
-   * @param {Function} callback
-   * @returns {InfiniLoadClient~ActionHandle}
-   */
-  static _registerRequestReadyCallback (requestId, callback) {
-    check(this, self);
-    check(requestId, String);
-    check(callback, Function);
-
-    this._log('register request ready callback', requestId);
-
-    this._requestDocuments.update(requestId, {
-      $push: {
-        onReady: callback
-      }
-    });
-
-    return self._getActionHandle(this, requestId);
-  }
-
-  /**
-   * Helper function for triggering all ready callback functions for the request.
-   * @private
-   * @param {InfiniLoadClient} instance
-   * @param {String} requestId
-   * @param {*} context
-   *        Context for the callbacks.
-   * @param {Array.<*>} args
-   *        The arguments to be passed to callbacks.
-   */
-  static _triggerRequestReadyCallbacks (instance, requestId, context, args) {
-    check(instance, self);
-    check(requestId, String);
-    check(args, Array);
-
-    instance._log('trigger request ready callbacks', requestId);
-
-    const requestDoc = instance._requestDocuments.findOne(requestId);
-    if (!requestDoc) {
-      return;
-    }
-
-    const callbacks = requestDoc.onReady || [];
-    for (let cb of callbacks) {
-      cb.apply(context, args);
-    }
-  }
-
-  /**
    * Helper function for marking the start time of a request in its request document.
    * @private
    * @param {InfiniLoadClient} instance
@@ -342,7 +290,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @param {InfiniLoadClient} instance
    * @param {String} requestId
    */
-  static _markRequestConfirmed (instance, requestId) {
+  static _confirmRequest (instance, requestId) {
     check(instance, self);
     check(requestId, String);
 
@@ -354,19 +302,34 @@ class InfiniLoadClient extends InfiniLoadBase {
   }
 
   /**
-   * Helper function for marking the ready time of a request in its request document.
+   * Helper function for resolving a request and marking the ready time.
    * @private
    * @param {InfiniLoadClient} instance
    * @param {String} requestId
    */
-  static _markRequestReady (instance, requestId) {
+  static _resolveRequest (instance, requestId) {
     check(instance, self);
     check(requestId, String);
 
+    const requestDoc = instance._requestDocuments.findOne(requestId);
+    let resolve = self._CONST.OP_NOOP;
+
+    if (requestDoc && requestDoc.promise &&
+        typeof requestDoc.promise.resolve === 'function') {
+      resolve = requestDoc.promise.resolve;
+    }
+
     instance._requestDocuments.update(requestId, {
       $set: {
-        readyAt: Date.now()
+        readyAt: Date.now(),
+        promise: null
       }
+    }, (error, count) => {
+      if (error) {
+        throw error;
+      }
+
+      resolve();
     });
   }
 
@@ -381,29 +344,50 @@ class InfiniLoadClient extends InfiniLoadBase {
     check(requestId, String);
 
     this._log('request confirmed', requestId);
-    self._markRequestConfirmed(this, requestId);
+    self._confirmRequest(this, requestId);
   }
 
   /**
-   * @typedef {Object} InfiniLoadClient~ActionHandle
-   * @property {Function} ready
-   *           Pass a callback to be executed when the action is ready.
+   * Helper function for saving a promise (its resolve and reject methods to be exact) to the request document.
+   * Never use directly and always use `.bind()` to set `this`.
+   * @private
+   * @param {String} requestId
+   * @param {Function} resolve `resolve` from a Promise constructor.
+   * @param {Function} reject `reject` from a Promise constructor.
    */
+  static _saveActionPromise (requestId, resolve, reject) {
+    check(this, self);
+    check(requestId, String);
+    check(resolve, Function);
+    check(reject, Function);
+
+    this._log('save action promise', requestId);
+
+    //! What if this step fails? Should it also be wrapped in a Promise?
+    this._requestDocuments.update(requestId, {
+      $set: {
+        promise: {
+          resolve,
+          reject
+        }
+      }
+    });
+  }
 
   /**
-   * Helper function for generating action handles.
+   * Helper function for generating action promises.
    * @private
    * @param {InfiniLoadClient} instance
    * @param {String} requestId
-   * @returns {InfiniLoadClient~ActionHandle}
+   * @returns {Promise}
    */
-  static _getActionHandle (instance, requestId) {
+  static _getActionPromise (instance, requestId) {
     check(instance, self);
     check(requestId, String);
 
-    return {
-      ready: self._registerRequestReadyCallback.bind(instance, requestId)
-    };
+    return (new Promise(self._saveActionPromise.bind(instance, requestId)))
+           // If the promise is resolved, return instance.
+           .then(self._CONST.OP_RETURN_THIS.bind(instance));
   }
 
   /**
@@ -412,7 +396,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @param {InfiniLoadClient} instance
    * @param {Boolean} [quit=false]
    *        Set to `true` to subscribe to an empty data source to clean up the collection.
-   * @returns {InfiniLoadClient~ActionHandle}
+   * @returns {Promise}
    */
   static _newSubscription (instance, quit = false) {
     check(instance, self);
@@ -456,7 +440,7 @@ class InfiniLoadClient extends InfiniLoadBase {
       instance._runtime.requestId = requestId;
     }
 
-    return self._getActionHandle(instance, requestId);
+    return self._getActionPromise(instance, requestId);
   }
 
   /**
@@ -478,6 +462,9 @@ class InfiniLoadClient extends InfiniLoadBase {
       return;
     }
 
+    let requestId = '',
+        eventName = '';
+
     if (stats) {
       // Stats is updated.
 
@@ -490,19 +477,23 @@ class InfiniLoadClient extends InfiniLoadBase {
       if (stats.requestId !== this._runtime.lastReceivedRequestId) {
         this._runtime.lastReceivedRequestId = stats.requestId;
 
-        self._markRequestReady(this, stats.requestId);
         this._log('request ready', stats.requestId, stats);
-
-        // Trigger callbacks outside of the autorun to avoid issues with Tracker.
-        Meteor._setImmediate(self._triggerRequestReadyCallbacks.bind(self, this, stats.requestId, this, [this.originalCollection]));
-        Meteor._setImmediate(self._callEventHandlers.bind(self, this, 'ready', this, [this.originalCollection]));
+        requestId = stats.requestId;
+        eventName = 'ready';
       }
     } else {
       // Stats is deleted and we are stopping.
 
+      this._log('stop request ready', this._runtime.requestId);
+      requestId = this._runtime.requestId;
+      eventName = 'stop';
+    }
+
+    if (requestId && eventName) {
+      self._resolveRequest(this, requestId);
+
       // Trigger callbacks outside of the autorun to avoid issues with Tracker.
-      Meteor._setImmediate(self._triggerRequestReadyCallbacks.bind(self, this, this._runtime.requestId, this, [this.originalCollection]));
-      Meteor._setImmediate(self._callEventHandlers.bind(self, this, 'stop', this, [this.originalCollection]));
+      Meteor._setImmediate(self._callEventHandlers.bind(self, this, eventName, this, [this.originalCollection]));
     }
   }
 
@@ -637,7 +628,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * If this called before starting, an error will be thrown.
    * @param {Number} [amount]
    *        The amount to load. If omitted, the default amount would be used.
-   * @returns {InfiniLoadClient~ActionHandle}
+   * @returns {Promise}
    */
   loadMore (amount = 0) {
     check(amount, Number);
@@ -660,7 +651,7 @@ class InfiniLoadClient extends InfiniLoadBase {
   /**
    * Load all new documents from server.
    * If this called before starting, an error will be thrown.
-   * @returns {InfiniLoadClient~ActionHandle}
+   * @returns {Promise}
    */
   loadNew () {
     if (!this.started) {
@@ -684,7 +675,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * Set the parameters sent to the server side.
    * If used before starting, registering any ready callbacks will not take effect.
    * @param {Object} data
-   * @returns {InfiniLoadClient~ActionHandle}
+   * @returns {Promise}
    */
   setServerParameters (data) {
     check(data, Object);
@@ -772,7 +763,7 @@ class InfiniLoadClient extends InfiniLoadBase {
   /**
    * Start all the automations. If a template instance is provided, all the automations will be attached to it so they will be terminated automatically.
    * @param {Blaze.TemplateInstance} [template]
-   * @returns {InfiniLoadClient~ActionHandle}
+   * @returns {Promise}
    */
   start (template) {
     check(template, Match.Optional(Blaze.TemplateInstance));
@@ -810,18 +801,19 @@ class InfiniLoadClient extends InfiniLoadBase {
     this._runtime.computations['checkRequestReady'] = this._autorun(self._statsChangedAutorun.bind(this));
 
     const handle = self._newSubscription(this);
-    handle.ready(() => {
+    return handle.then((inst) => {
       delete this._runtime.starting;
       this._log('started');
+
+      return inst;
     });
-    return handle;
   }
 
   /**
    * Force a new subscription with the current settings.
    * This is used to wait for previous server updates to propagate to client.
    * If this called before starting, an error will be thrown.
-   * @returns {InfiniLoadClient~ActionHandle}
+   * @returns {Promise}
    */
   sync () {
     if (!this.started) {
@@ -835,6 +827,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Stop all the automations.
+   * @returns {Promise}
    */
   stop () {
     if (!this._runtime.running) {
@@ -849,7 +842,7 @@ class InfiniLoadClient extends InfiniLoadBase {
     this._runtime.stopping = true;
 
     const handle = self._newSubscription(this, true);
-    handle.ready(() => {
+    return handle.then((inst) => {
       // Stop all computations.
       for (let name of Object.keys(this._runtime.computations)) {
         let comp = this._runtime.computations[name];
@@ -879,9 +872,9 @@ class InfiniLoadClient extends InfiniLoadBase {
 
       delete this._runtime.stopping;
       this._log('stopped');
-    });
 
-    return handle;
+      return inst;
+    });
   }
 
 }

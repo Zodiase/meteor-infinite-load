@@ -145,13 +145,21 @@ if (Meteor.isClient) {
   const oldItemCount = 37;
   const newItemCount = 7;
 
-  Tinytest.addAsync('Basics - client side methods', function (test, next) {
-    const onLibReady = (error, result) => {
-      if (error) {
-        throw error;
-      }
+  // Helper for wrapping `Meteor.call` in a Promise.
+  const callPromise = (methodName, options) => {
+    return new Promise((resolve, reject) => {
+      Meteor.call(methodName, options, (error, result) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(result);
+        }
+      });
+    });
+  };
 
-      const id = result;
+  Tinytest.addAsync('Basics - client side methods', function (test, next) {
+    callPromise('newlib', {}).then((id) => {
       const inst = new lib(dataCollection, {
         id,
         verbose: true
@@ -179,20 +187,11 @@ if (Meteor.isClient) {
       for (let key of methodNames) {
         test.equal(typeof inst[key], 'function');
       }
-
-      next();
-    };
-
-    Meteor.call('newlib', {}, onLibReady);
+    }).then(next);
   });
 
   Tinytest.addAsync('Basics - client side properties', function (test, next) {
-    const onLibReady = (error, result) => {
-      if (error) {
-        throw error;
-      }
-
-      const id = result;
+    callPromise('newlib', {}).then((id) => {
       const inst = new lib(dataCollection, {
         id,
         verbose: true
@@ -208,11 +207,7 @@ if (Meteor.isClient) {
       for (let key of Object.keys(properties)) {
         test.equal(Match.test(inst[key], properties[key]), true);
       }
-
-      next();
-    };
-
-    Meteor.call('newlib', {}, onLibReady);
+    }).then(next);
   });
 
   Tinytest.addAsync('APIs - test state before starting', function (test, next) {
@@ -221,15 +216,8 @@ if (Meteor.isClient) {
       limitIncrement: loadIncrement
     };
 
-    const onLibReady = (error, result) => {
-      if (error) {
-        throw error;
-      }
-
+    callPromise('newlib', libOptions).then((id) => {
       // Server side is ready.
-
-      const id = result;
-
       // Instantiate client side.
       const inst = new lib(dataCollection, {
         id,
@@ -247,11 +235,7 @@ if (Meteor.isClient) {
       test.equal(inst.countTotal(), 0);
       test.equal(inst.hasMore(), false);
       test.equal(inst.hasNew(), false);
-
-      next();
-    };
-
-    Meteor.call('newlib', libOptions, onLibReady);
+    }).then(next);
   });
 
   Tinytest.addAsync('APIs - test start, stop and ready cycle', function (test, next) {
@@ -260,15 +244,8 @@ if (Meteor.isClient) {
       limitIncrement: loadIncrement
     };
 
-    const onLibReady = (error, result) => {
-      if (error) {
-        throw error;
-      }
-
+    callPromise('newlib', libOptions).then((id) => {
       // Server side is ready.
-
-      const id = result;
-
       // Instantiate client side.
       const inst = new lib(dataCollection, {
         id,
@@ -277,14 +254,12 @@ if (Meteor.isClient) {
       });
       saveInstance(id, inst);
 
-      inst.start().ready(() => {
-        test.ok();
+      return inst.start();
+    }).then((inst) => {
+      test.ok();
 
-        inst.stop().ready(next);
-      });
-    };
-
-    Meteor.call('newlib', libOptions, onLibReady);
+      return inst.stop();
+    }).then(next);
   });
 
   Tinytest.addAsync('APIs - test stats after started', function (test, next) {
@@ -302,15 +277,10 @@ if (Meteor.isClient) {
           secret
         }
       };
-      Meteor.call('newlib', libOptions, (error, result) => {
-        if (error) {
-          throw error;
-        }
 
+
+      callPromise('newlib', libOptions).then((id) => {
         // Server side is ready.
-
-        const id = result;
-
         // Instantiate client side.
         const inst = new lib(dataCollection, {
           id,
@@ -319,19 +289,19 @@ if (Meteor.isClient) {
         });
         saveInstance(id, inst);
 
-        inst.start().ready(() => {
-          test.equal(inst.find({}).count(), initialLoadLimit);
-          test.equal(inst.count(), initialLoadLimit);
-          test.equal(inst.limit, initialLoadLimit);
-          test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
-          test.equal(inst.countNew(), 0);
-          test.equal(inst.countTotal(), oldItemCount);
-          test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
-          test.equal(inst.hasNew(), false);
+        return inst.start();
+      }).then((inst) => {
+        test.equal(inst.find({}).count(), initialLoadLimit);
+        test.equal(inst.count(), initialLoadLimit);
+        test.equal(inst.limit, initialLoadLimit);
+        test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
+        test.equal(inst.countNew(), 0);
+        test.equal(inst.countTotal(), oldItemCount);
+        test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
+        test.equal(inst.hasNew(), false);
 
-          inst.stop().ready(next);
-        });
-      });
+        return inst.stop();
+      }).then(next);
     });
   });
 
@@ -351,15 +321,8 @@ if (Meteor.isClient) {
         }
       };
 
-      Meteor.call('newlib', libOptions, (error, result) => {
-        if (error) {
-          throw error;
-        }
-
+      callPromise('newlib', libOptions).then((id) => {
         // Server side is ready.
-
-        const id = result;
-
         // Instantiate client side.
         const inst = new lib(dataCollection, {
           id,
@@ -368,21 +331,21 @@ if (Meteor.isClient) {
         });
         saveInstance(id, inst);
 
-        inst.start().ready(() => {
-          inst.loadMore().ready(() => {
-            test.equal(inst.find({}).count(), initialLoadLimit + loadIncrement);
-            test.equal(inst.count(), initialLoadLimit + loadIncrement);
-            test.equal(inst.limit, initialLoadLimit + loadIncrement);
-            test.equal(inst.countMore(), oldItemCount - (initialLoadLimit + loadIncrement));
-            test.equal(inst.countNew(), 0);
-            test.equal(inst.countTotal(), oldItemCount);
-            test.equal(inst.hasMore(), oldItemCount > (initialLoadLimit + loadIncrement));
-            test.equal(inst.hasNew(), false);
+        return inst.start();
+      }).then((inst) => {
+        return inst.loadMore();
+      }).then((inst) => {
+        test.equal(inst.find({}).count(), initialLoadLimit + loadIncrement);
+        test.equal(inst.count(), initialLoadLimit + loadIncrement);
+        test.equal(inst.limit, initialLoadLimit + loadIncrement);
+        test.equal(inst.countMore(), oldItemCount - (initialLoadLimit + loadIncrement));
+        test.equal(inst.countNew(), 0);
+        test.equal(inst.countTotal(), oldItemCount);
+        test.equal(inst.hasMore(), oldItemCount > (initialLoadLimit + loadIncrement));
+        test.equal(inst.hasNew(), false);
 
-            inst.stop().ready(next);
-          });
-        });
-      });
+        return inst.stop();
+      }).then(next);
     });
   });
 
@@ -402,15 +365,8 @@ if (Meteor.isClient) {
         }
       };
 
-      Meteor.call('newlib', libOptions, (error, result) => {
-        if (error) {
-          throw error;
-        }
-
+      callPromise('newlib', libOptions).then((id) => {
         // Server side is ready.
-
-        const id = result;
-
         // Instantiate client side.
         const inst = new lib(dataCollection, {
           id,
@@ -419,37 +375,32 @@ if (Meteor.isClient) {
         });
         saveInstance(id, inst);
 
-        inst.start().ready(() => {
+        return inst.start();
+      }).then((inst) => {
+        const newItems = [];
 
-          const newItems = [];
-
-          // Use loadIncrement for new item count.
-          for (let i = 0; i < newItemCount; ++i) {
-            newItems.push({
-              secret
-            });
-          }
-
-          Meteor.call('insert', newItems, (error, result) => {
-            if (error) {
-              throw error;
-            }
-
-            inst.sync().ready(() => {
-              test.equal(inst.find({}).count(), initialLoadLimit);
-              test.equal(inst.count(), initialLoadLimit);
-              test.equal(inst.limit, initialLoadLimit);
-              test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
-              test.equal(inst.countNew(), newItemCount);
-              test.equal(inst.countTotal(), oldItemCount + newItemCount);
-              test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
-              test.equal(inst.hasNew(), newItemCount > 0);
-
-              inst.stop().ready(next);
-            });
+        // Use loadIncrement for new item count.
+        for (let i = 0; i < newItemCount; ++i) {
+          newItems.push({
+            secret
           });
+        }
+
+        return callPromise('insert', newItems).then((result) => {
+          return inst.sync();
         });
-      });
+      }).then((inst) => {
+        test.equal(inst.find({}).count(), initialLoadLimit);
+        test.equal(inst.count(), initialLoadLimit);
+        test.equal(inst.limit, initialLoadLimit);
+        test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
+        test.equal(inst.countNew(), newItemCount);
+        test.equal(inst.countTotal(), oldItemCount + newItemCount);
+        test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
+        test.equal(inst.hasNew(), newItemCount > 0);
+
+        return inst.stop();
+      }).then(next);
     });
   });
 
@@ -469,15 +420,8 @@ if (Meteor.isClient) {
         }
       };
 
-      Meteor.call('newlib', libOptions, (error, result) => {
-        if (error) {
-          throw error;
-        }
-
+      callPromise('newlib', libOptions).then((id) => {
         // Server side is ready.
-
-        const id = result;
-
         // Instantiate client side.
         const inst = new lib(dataCollection, {
           id,
@@ -486,40 +430,34 @@ if (Meteor.isClient) {
         });
         saveInstance(id, inst);
 
-        inst.start().ready(() => {
+        return inst.start();
+      }).then((inst) => {
+        const newItems = [];
 
-          const newItems = [];
-
-          // Use loadIncrement for new item count.
-          for (let i = 0; i < newItemCount; ++i) {
-            newItems.push({
-              secret
-            });
-          }
-
-          Meteor.call('insert', newItems, (error, result) => {
-            if (error) {
-              throw error;
-            }
-
-            inst.sync().ready(() => {
-
-              inst.loadNew().ready(() => {
-                test.equal(inst.find({}).count(), initialLoadLimit + newItemCount);
-                test.equal(inst.count(), initialLoadLimit + newItemCount);
-                test.equal(inst.limit, initialLoadLimit + newItemCount);
-                test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
-                test.equal(inst.countNew(), 0);
-                test.equal(inst.countTotal(), oldItemCount + newItemCount);
-                test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
-                test.equal(inst.hasNew(), false);
-
-                inst.stop().ready(next);
-              });
-            });
+        // Use loadIncrement for new item count.
+        for (let i = 0; i < newItemCount; ++i) {
+          newItems.push({
+            secret
           });
+        }
+
+        return callPromise('insert', newItems).then((result) => {
+          return inst.sync();
         });
-      });
+      }).then((inst) => {
+        return inst.loadNew();
+      }).then((inst) => {
+        test.equal(inst.find({}).count(), initialLoadLimit + newItemCount);
+        test.equal(inst.count(), initialLoadLimit + newItemCount);
+        test.equal(inst.limit, initialLoadLimit + newItemCount);
+        test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
+        test.equal(inst.countNew(), 0);
+        test.equal(inst.countTotal(), oldItemCount + newItemCount);
+        test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
+        test.equal(inst.hasNew(), false);
+
+        return inst.stop();
+      }).then(next);
     });
   });
 
@@ -529,15 +467,10 @@ if (Meteor.isClient) {
       limitIncrement: loadIncrement
     };
 
-    Meteor.call('newlib', libOptions, (error, result) => {
-      if (error) {
-        throw error;
-      }
+    let readyCount = 0;
 
+    callPromise('newlib', libOptions).then((id) => {
       // Server side is ready.
-
-      const id = result;
-
       // Instantiate client side.
       const inst = new lib(dataCollection, {
         id,
@@ -546,21 +479,20 @@ if (Meteor.isClient) {
       });
       saveInstance(id, inst);
 
-      let readyCount = 0;
       inst.on('ready', () => {
         readyCount += 1;
       });
 
-      inst.start().ready(() => {
-        test.equal(readyCount, 0);
+      return inst.start();
+    }).then((inst) => {
+      test.equal(readyCount, 0);
 
-        inst.sync().ready(() => {
-          test.equal(readyCount, 1);
+      return inst.sync();
+    }).then((inst) => {
+      test.equal(readyCount, 1);
 
-          inst.stop().ready(next);
-        });
-      });
-    });
+      return inst.stop();
+    }).then(next);
   });
 
   Tinytest.addAsync('APIs - test setting and getting server parameters', function (test, next) {
@@ -569,15 +501,12 @@ if (Meteor.isClient) {
       limitIncrement: loadIncrement
     };
 
-    Meteor.call('newlib', libOptions, (error, result) => {
-      if (error) {
-        throw error;
-      }
+    const secret = {
+      secret: Meteor.uuid()
+    };
 
+    callPromise('newlib', libOptions).then((id) => {
       // Server side is ready.
-
-      const id = result;
-
       // Instantiate client side.
       const inst = new lib(dataCollection, {
         id,
@@ -586,18 +515,14 @@ if (Meteor.isClient) {
       });
       saveInstance(id, inst);
 
-      inst.start().ready(() => {
-        const secret = {
-          secret: Meteor.uuid()
-        };
+      return inst.start();
+    }).then((inst) => {
+      return inst.setServerParameters(secret);
+    }).then((inst) => {
+      test.equal(inst.getServerParameters(), secret);
 
-        inst.setServerParameters(secret).ready(() => {
-          test.equal(inst.getServerParameters(), secret);
-
-          inst.stop().ready(next);
-        });
-      });
-    });
+      return inst.stop();
+    }).then(next);
   });
 
   Tinytest.add('Finishing - make sure all instances are stopped', function (test) {
