@@ -6,7 +6,7 @@ import { check, Match } from 'meteor/check';
  * Common interface shared by both client and server code.
  * For inheritance only, should not be instantiated directly.
  */
-export class InfiniLoadBase {
+class InfiniLoadBase {
 
   /**
    * Configurable options existing on both client side and server side.
@@ -157,3 +157,5 @@ InfiniLoadBase._DATA = {
     */
   instances: new Map()
 };
+
+export { InfiniLoadBase };
