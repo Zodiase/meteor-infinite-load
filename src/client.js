@@ -766,7 +766,9 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @returns {Promise}
    */
   start (template) {
-    check(template, Match.Optional(Blaze.TemplateInstance));
+    if (typeof template !== 'undefined' && !(template instanceof Blaze.TemplateInstance)) {
+      throw new Error('InfiniLoadClient.start(template): `template` has to be an instance of Blaze Template.');
+    }
 
     if (this._runtime.running) {
       throw new Error('InfiniLoadClient ' + this.collectionName + ' is already running.');
