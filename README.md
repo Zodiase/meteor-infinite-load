@@ -50,7 +50,11 @@ Template.body.helpers({
 Template.body.events({
   'click .button-loadMore' (event, tpl) {
     if (infiniSomeData.started) {
+      const buttonElement = event.currentTarget;
+      // Disable the button to prevent more clicks before the request is ready.
+      buttonElement.disabled = true;
       infiniSomeData.loadMore().then((infiniSomeData) => {
+        buttonElement.disabled = false;
         // Do things after more data is loaded.
         console.log(infiniSomeData.count() + ' items loaded.');
       });
@@ -58,7 +62,11 @@ Template.body.events({
   },
   'click .button-loadNew' (event, tpl) {
     if (infiniSomeData.started) {
+      const buttonElement = event.currentTarget;
+      // Disable the button to prevent more clicks before the request is ready.
+      buttonElement.disabled = true;
       infiniSomeData.loadNew().then((infiniSomeData) => {
+        buttonElement.disabled = false;
         // Do things after all new data is loaded.
         console.log(infiniSomeData.count() + ' items loaded.');
       });
@@ -76,3 +84,4 @@ Template.body.onCreated(function () {
 
 Examples
 ------------------------
+To be added.
