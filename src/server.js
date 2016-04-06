@@ -77,12 +77,9 @@ class InfiniLoadServer extends InfiniLoadBase {
 
     me._log('construct', options);
 
-    /*
-     * Launch sequence:
-     *   - Check parameters.
-     *   - Initialize variables.
-     *   - Publish data.
-     */
+    /***************************************************************************
+      Check parameters.
+    ***************************************************************************/
 
     check(options, self._CONST.CONSTRUCT_OPTIONS_PATTERN);
 
@@ -103,6 +100,15 @@ class InfiniLoadServer extends InfiniLoadBase {
     const affiliation = options.affiliation || null;
     const slowdown = options.slowdown || 0;
 
+    if (self._CONST.SUPPORTED_TIME_TYPES.indexOf(timeFieldType) < 0) {
+      throw new Error('Error when initializing InfiniLoadServer ' + me.id + '. "' +
+        timeFieldType + '" is not a supported time field type.');
+    }
+
+    /***************************************************************************
+      Initialize variables.
+    ***************************************************************************/
+
     const getFindSelector = (typeof selector === 'function')
                             ? selector
                             : self._CONST.OP_RETURN_THIS.bind(selector);
@@ -112,6 +118,10 @@ class InfiniLoadServer extends InfiniLoadBase {
     const getFindFields = (typeof fields === 'function')
                           ? fields
                           : self._CONST.OP_RETURN_THIS.bind(fields);
+
+    /***************************************************************************
+      Publish data.
+    ***************************************************************************/
 
     /**
      * @typedef {Object} InfiniLoadServer~SubscribeOptions
@@ -129,6 +139,7 @@ class InfiniLoadServer extends InfiniLoadBase {
     Meteor.publish(me.collectionName, function (options = {}) {
       const connection = this;
       const subscriptionId = connection._subscriptionId;
+      // When userId changes the connection will be reset.
       const userId = connection.userId;
       // `Date.now()` is faster than `new Date().getTime()`.
       const now = Date.now();
@@ -150,6 +161,8 @@ class InfiniLoadServer extends InfiniLoadBase {
       const serverArgs = options.args || {};
       const findLimit = options.limit || 0;
       const lastLoadTime = initialLoad ? now : options.lastLoadTime;
+      // This value is used in selectors.
+      const lastLoadTime_typed = self._CONST.CONVERT_TIME[timeFieldType](lastLoadTime);
 
       const findSelector = getFindSelector(userId, serverArgs);
       //! Current only support Object style sort options. Need to support array style.
@@ -306,66 +319,87 @@ class InfiniLoadServer extends InfiniLoadBase {
         }
       });
 
+      /*************************************************************************
+      ! Affiliation with cursor is impossible without losing reactivity.
+      *************************************************************************/
+
       // Affiliation.
-      let affiliateAutorun = null;
       if (affiliation) {
+        me._log('affiliation starts');
+
         let affiliatedDocs = {};
-        affiliateAutorun = Tracker.autorun((comp) => {
-          const cursor = collection.find(findSelector, findOptions);
-          let affiliatedCursors = affiliation(oldDocCursor);
-          // Proceed only if returns anything.
-          if (affiliatedCursors) {
-            // Make it an array.
-            if (!Array.isArray(affiliatedCursors)) {
-              affiliatedCursors = [affiliatedCursors];
-            }
-            // Examine the array and handle Mongo.Cursor items.
-            for (let cursor of affiliatedCursors) {
-              //! "Publish" each cursors.
 
-              // `cursor instanceof Mongo.Cursor` doesn't work.
-              if (cursor.observe) {
-                const collectionName = cursor._cursorDescription.collectionName;
-                if (typeof affiliatedDocs[collectionName] === 'undefined') {
-                  affiliatedDocs[collectionName] = new Map();
-                }
-                const docs = affiliatedDocs[collectionName];
+        // Add time selector.
+        const oldDocSelector = {};
+        oldDocSelector[timeFieldName] = {
+          '$lte': lastLoadTime_typed
+        };
 
-                cursor.observe({
-                  'added': (doc) => {
-                    if (docs.has(doc._id)) {
-                      const storedDoc = docs.get(doc._id);
-                      if (!_.isEqual(storedDoc, doc)) {
-                        connection.changed(collectionName, doc._id, doc);
-                        docs.set(doc._id, doc);
-                      }
-                    } else {
-                      connection.added(collectionName, doc._id, doc);
+        // This is non-reactive.
+        const oldDocCursor = collection.find({
+          $and: [
+            oldDocSelector,
+            findSelector
+          ]
+        }, {
+          ...findOptions,
+          limit: findLimit
+        });
+
+        // This step could be reactive, depending on `affiliation`.
+        let affiliatedCursors = affiliation(oldDocCursor);
+        // Proceed only if returns anything.
+        if (affiliatedCursors) {
+          // Make it an array.
+          if (!Array.isArray(affiliatedCursors)) {
+            affiliatedCursors = [affiliatedCursors];
+          }
+          // Examine the array and handle Mongo.Cursor items.
+          for (let cursor of affiliatedCursors) {
+            // `cursor instanceof Mongo.Cursor` doesn't work.
+            if (cursor.observe) {
+              // "Publish" each cursors.
+
+              const collectionName = cursor._cursorDescription.collectionName;
+              if (typeof affiliatedDocs[collectionName] === 'undefined') {
+                affiliatedDocs[collectionName] = new Map();
+              }
+              const docs = affiliatedDocs[collectionName];
+
+              cursor.observe({
+                'added': (doc) => {
+                  if (docs.has(doc._id)) {
+                    const storedDoc = docs.get(doc._id);
+                    if (!_.isEqual(storedDoc, doc)) {
+                      connection.changed(collectionName, doc._id, doc);
                       docs.set(doc._id, doc);
                     }
-                  },
-                  'changed': (newDoc, oldDoc) => {
-                    if (docs.has(oldDoc._id)) {
-                      connection.changed(collectionName, oldDoc._id, newDoc);
-                      docs.set(oldDoc._id, newDoc);
-                    } else {
-                      connection.added(collectionName, newDoc._id, newDoc);
-                      docs.set(newDoc._id, newDoc);
-                    }
-                  },
-                  'removed': (doc) => {
-                    if (docs.has(doc._id)) {
-                      connection.removed(collectionName, doc._id);
-                      docs.delete(doc._id);
-                    } else {
-                      // Do Nothing.
-                    }
+                  } else {
+                    connection.added(collectionName, doc._id, doc);
+                    docs.set(doc._id, doc);
                   }
-                });
-              }
+                },
+                'changed': (newDoc, oldDoc) => {
+                  if (docs.has(oldDoc._id)) {
+                    connection.changed(collectionName, oldDoc._id, newDoc);
+                    docs.set(oldDoc._id, newDoc);
+                  } else {
+                    connection.added(collectionName, newDoc._id, newDoc);
+                    docs.set(newDoc._id, newDoc);
+                  }
+                },
+                'removed': (doc) => {
+                  if (docs.has(doc._id)) {
+                    connection.removed(collectionName, doc._id);
+                    docs.delete(doc._id);
+                  } else {
+                    // Do Nothing.
+                  }
+                }
+              });
             }
           }
-        });
+        }
       }
 
       initializing = false;
@@ -375,11 +409,6 @@ class InfiniLoadServer extends InfiniLoadBase {
       connection.ready();
       connection.onStop(() => {
         observer.stop();
-
-        // Affiliation.
-        if (affiliateAutorun) {
-          affiliateAutorun.stop();
-        }
       });
     });
     me._log('published');
@@ -433,7 +462,18 @@ InfiniLoadServer._CONST = _.extend({}, InfiniLoadBase._CONST, /** @lends InfiniL
     requestId: String,
     args: Match.Optional(Object),
     lastLoadTime: Match.Optional(Number)
-  })
+  }),
+  SUPPORTED_TIME_TYPES: [
+    'number', 'date'
+  ],
+  CONVERT_TIME: {
+    'number' (numValue) {
+      return numValue;
+    },
+    'date' (numValue) {
+      return new Date(numValue);
+    }
+  }
 });
 
 /**

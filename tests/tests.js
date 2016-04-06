@@ -5,6 +5,7 @@ import { InfiniLoad } from "meteor/zodiase:infinite-load";
 
 // Collection used for testing.
 const dataCollection = new Mongo.Collection('test');
+const affiliatedCollection = new Mongo.Collection('test_affiliation');
 
 // Export to window for debugging in user-agent.
 if (Meteor.isClient) window.dataCollection = dataCollection;
@@ -37,16 +38,39 @@ function saveInstance (key, instance) {
 // Basic checks.
 check(lib, Function);
 
+const affiliation_docCount = 5;
+
 // Server side resetting for each pass of tests.
 if (Meteor.isServer) {
   Tinytest.add('Reset - server', function (test) {
     dataCollection.remove({});
+
+    affiliatedCollection.remove({});
+    for (let i = 0; i < affiliation_docCount * 2; ++i) {
+      affiliatedCollection.insert({
+        refId: i,
+        secret: Meteor.uuid()
+      });
+    }
+
     test.ok();
   });
 
   Meteor.methods({
     'newlib' (options) {
       check(options, Object);
+
+      if (typeof options.affiliation !== 'undefined') {
+        options.affiliation = function (cursor) {
+          const refIds = cursor.fetch().map((doc) => doc.refId);
+          return affiliatedCollection.find({
+            refId: {
+              $in: refIds
+            }
+          });
+        };
+      }
+
       const instId = newInstanceId();
       const infiniServer = new lib(dataCollection, {
         verbose: false,
@@ -89,6 +113,13 @@ if (Meteor.isServer) {
       }
 
       return docIds;
+    },
+    'update' ({ selector, setObj }) {
+      check(selector, Match.OneOf(String, Object));
+      check(setObj, Object);
+      dataCollection.update(selector, {
+        $set: setObj
+      })
     }
   });
 }
@@ -138,9 +169,27 @@ Tinytest.add('Instantiation - multiple identical instantiations throw', function
   });
 });
 
+if (Meteor.isServer) {
+  Tinytest.add('Instantiation - unsupported time field type throws', function (test) {
+    const id = newInstanceId();
+    test.throws(function () {
+      const inst = new lib(dataCollection, {
+        id,
+        timeField: {
+          name: 'foo',
+          type: 'unsupported'
+        },
+        verbose: false
+      });
+    });
+  });
+}
+
 if (Meteor.isClient) {
   //! For debugging only.
   window.Meteor = Meteor;
+  window.dataCollection = dataCollection;
+  window.affiliatedCollection = affiliatedCollection;
 
   const initialLoadLimit = 3;
   const loadIncrement = 5;
@@ -566,6 +615,98 @@ if (Meteor.isClient) {
     .then((inst) => inst.stop())
     .then(next);
   });
+
+
+  Tinytest.addAsync('APIs - test affiliation', function (test, next) {
+    const secret = Meteor.uuid();
+
+    const libOptions = {
+      // Use a small load limit.
+      initialLimit: affiliation_docCount,
+      // We don't plan on increasing load limit.
+      limitIncrement: 0,
+      selector: {
+        secret
+      },
+      // This asks the server method to fill in the test function.
+      affiliation: true,
+      verbose: true
+    };
+
+    // Prepare "old" docs.
+    const oldItems = [];
+
+    for (let i = 0; i < affiliation_docCount; ++i) {
+      oldItems.push({
+        secret,
+        refId: i
+      });
+    }
+
+    callPromise('insert', oldItems)
+    .then(() => callPromise('newlib', libOptions))
+    .then((id) => {
+      // Server side is ready.
+      // Instantiate client side.
+      const inst = new lib(dataCollection, {
+        ...libOptions,
+        id
+      });
+      saveInstance(id, inst);
+
+      return inst;
+    })
+    // Confirm the affiliated collection is empty before start.
+    .then((inst) => {
+      test.equal(affiliatedCollection.find().count(), 0);
+      return inst;
+    })
+    .then((inst) => inst.start())
+    // Confirm the existance of all affiliated documents.
+    .then((inst) => {
+      for (let item of oldItems) {
+        test.isNotUndefined(affiliatedCollection.findOne({
+          refId: item.refId
+        }));
+      }
+      return inst;
+    })
+    // Ask server to alter data.
+    .then((inst) => {
+      return callPromise('update', {
+        selector: {
+          secret,
+          refId: 1
+        },
+        setObj: {
+          refId: 6
+        }
+      }).then((result) => {
+        return inst;
+//         return inst.sync();
+      });
+    })
+/*
+    // Confirm the existance of all affiliated documents.
+    .then((inst) => {
+      for (let item of oldItems) {
+        test.isNotUndefined(affiliatedCollection.findOne({
+          refId: item.refId
+        }));
+      }
+      return inst;
+    })
+    .then((inst) => inst.stop())
+    // Confirm the affiliated collection is empty after stop.
+    .then((inst) => {
+      test.equal(affiliatedCollection.find().count(), 0);
+      return inst;
+    })
+    .then(next)
+*/;
+  });
+
+
 
   Tinytest.add('Finishing - make sure all instances are stopped', function (test) {
     instances.forEach((inst) => {
