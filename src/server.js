@@ -306,6 +306,68 @@ class InfiniLoadServer extends InfiniLoadBase {
         }
       });
 
+      // Affiliation.
+      let affiliateAutorun = null;
+      if (affiliation) {
+        let affiliatedDocs = {};
+        affiliateAutorun = Tracker.autorun((comp) => {
+          const cursor = collection.find(findSelector, findOptions);
+          let affiliatedCursors = affiliation(oldDocCursor);
+          // Proceed only if returns anything.
+          if (affiliatedCursors) {
+            // Make it an array.
+            if (!Array.isArray(affiliatedCursors)) {
+              affiliatedCursors = [affiliatedCursors];
+            }
+            // Examine the array and handle Mongo.Cursor items.
+            for (let cursor of affiliatedCursors) {
+              //! "Publish" each cursors.
+
+              // `cursor instanceof Mongo.Cursor` doesn't work.
+              if (cursor.observe) {
+                const collectionName = cursor._cursorDescription.collectionName;
+                if (typeof affiliatedDocs[collectionName] === 'undefined') {
+                  affiliatedDocs[collectionName] = new Map();
+                }
+                const docs = affiliatedDocs[collectionName];
+
+                cursor.observe({
+                  'added': (doc) => {
+                    if (docs.has(doc._id)) {
+                      const storedDoc = docs.get(doc._id);
+                      if (!_.isEqual(storedDoc, doc)) {
+                        connection.changed(collectionName, doc._id, doc);
+                        docs.set(doc._id, doc);
+                      }
+                    } else {
+                      connection.added(collectionName, doc._id, doc);
+                      docs.set(doc._id, doc);
+                    }
+                  },
+                  'changed': (newDoc, oldDoc) => {
+                    if (docs.has(oldDoc._id)) {
+                      connection.changed(collectionName, oldDoc._id, newDoc);
+                      docs.set(oldDoc._id, newDoc);
+                    } else {
+                      connection.added(collectionName, newDoc._id, newDoc);
+                      docs.set(newDoc._id, newDoc);
+                    }
+                  },
+                  'removed': (doc) => {
+                    if (docs.has(doc._id)) {
+                      connection.removed(collectionName, doc._id);
+                      docs.delete(doc._id);
+                    } else {
+                      // Do Nothing.
+                    }
+                  }
+                });
+              }
+            }
+          }
+        });
+      }
+
       initializing = false;
 
       addStatsDocumentToClient();
@@ -313,6 +375,11 @@ class InfiniLoadServer extends InfiniLoadBase {
       connection.ready();
       connection.onStop(() => {
         observer.stop();
+
+        // Affiliation.
+        if (affiliateAutorun) {
+          affiliateAutorun.stop();
+        }
       });
     });
     me._log('published');
