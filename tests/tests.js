@@ -48,10 +48,9 @@ if (Meteor.isServer) {
     'newlib' (options) {
       check(options, Object);
       options.id = newInstanceId();
-      options.verbose = true;
+      options.verbose = false;
       const infiniServer = new lib(dataCollection, options);
       saveInstance(options.id, infiniServer);
-      console.log('new lib ready', options.id);
       return options.id;
     },
     'prepareData' (amount, secret) {
@@ -101,7 +100,7 @@ Tinytest.add('Instantiation - instantiation', function (test) {
   const id = newInstanceId();
   const inst = new lib(dataCollection, {
     id,
-    verbose: true
+    verbose: false
   });
   saveInstance(id, inst);
 
@@ -124,14 +123,14 @@ Tinytest.add('Instantiation - multiple identical instantiations throw', function
   const id = newInstanceId();
   const inst = new lib(dataCollection, {
     id,
-    verbose: true
+    verbose: false
   });
   saveInstance(id, inst);
 
   test.throws(function () {
     const inst = new lib(dataCollection, {
       id,
-      verbose: true
+      verbose: false
     });
   });
 });
@@ -162,7 +161,7 @@ if (Meteor.isClient) {
     callPromise('newlib', {}).then((id) => {
       const inst = new lib(dataCollection, {
         id,
-        verbose: true
+        verbose: false
       });
       saveInstance(id, inst);
 
@@ -194,7 +193,7 @@ if (Meteor.isClient) {
     callPromise('newlib', {}).then((id) => {
       const inst = new lib(dataCollection, {
         id,
-        verbose: true
+        verbose: false
       });
       saveInstance(id, inst);
 
@@ -221,7 +220,7 @@ if (Meteor.isClient) {
       // Instantiate client side.
       const inst = new lib(dataCollection, {
         id,
-        verbose: true,
+        verbose: false,
         ...libOptions
       });
       saveInstance(id, inst);
@@ -249,7 +248,7 @@ if (Meteor.isClient) {
       // Instantiate client side.
       const inst = new lib(dataCollection, {
         id,
-        verbose: true,
+        verbose: false,
         ...libOptions
       });
       saveInstance(id, inst);
@@ -284,7 +283,7 @@ if (Meteor.isClient) {
         // Instantiate client side.
         const inst = new lib(dataCollection, {
           id,
-          verbose: true,
+          verbose: false,
           ...libOptions
         });
         saveInstance(id, inst);
@@ -326,7 +325,7 @@ if (Meteor.isClient) {
         // Instantiate client side.
         const inst = new lib(dataCollection, {
           id,
-          verbose: true,
+          verbose: false,
           ...libOptions
         });
         saveInstance(id, inst);
@@ -370,7 +369,7 @@ if (Meteor.isClient) {
         // Instantiate client side.
         const inst = new lib(dataCollection, {
           id,
-          verbose: true,
+          verbose: false,
           ...libOptions
         });
         saveInstance(id, inst);
@@ -425,7 +424,7 @@ if (Meteor.isClient) {
         // Instantiate client side.
         const inst = new lib(dataCollection, {
           id,
-          verbose: true,
+          verbose: false,
           ...libOptions
         });
         saveInstance(id, inst);
@@ -474,7 +473,7 @@ if (Meteor.isClient) {
       // Instantiate client side.
       const inst = new lib(dataCollection, {
         id,
-        verbose: true,
+        verbose: false,
         ...libOptions
       });
       saveInstance(id, inst);
@@ -510,7 +509,7 @@ if (Meteor.isClient) {
       // Instantiate client side.
       const inst = new lib(dataCollection, {
         id,
-        verbose: true,
+        verbose: false,
         ...libOptions
       });
       saveInstance(id, inst);
