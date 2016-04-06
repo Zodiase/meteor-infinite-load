@@ -47,11 +47,14 @@ if (Meteor.isServer) {
   Meteor.methods({
     'newlib' (options) {
       check(options, Object);
-      options.id = newInstanceId();
-      options.verbose = false;
-      const infiniServer = new lib(dataCollection, options);
-      saveInstance(options.id, infiniServer);
-      return options.id;
+      const instId = newInstanceId();
+      const infiniServer = new lib(dataCollection, {
+        verbose: false,
+        ...options,
+        id: instId
+      });
+      saveInstance(instId, infiniServer);
+      return instId;
     },
     'prepareData' (amount, secret) {
       check(amount, Number);
@@ -158,7 +161,8 @@ if (Meteor.isClient) {
   };
 
   Tinytest.addAsync('Basics - client side methods', function (test, next) {
-    callPromise('newlib', {}).then((id) => {
+    callPromise('newlib', {})
+    .then((id) => {
       const inst = new lib(dataCollection, {
         id,
         verbose: false
@@ -186,11 +190,13 @@ if (Meteor.isClient) {
       for (let key of methodNames) {
         test.equal(typeof inst[key], 'function');
       }
-    }).then(next);
+    })
+    .then(next);
   });
 
   Tinytest.addAsync('Basics - client side properties', function (test, next) {
-    callPromise('newlib', {}).then((id) => {
+    callPromise('newlib', {})
+    .then((id) => {
       const inst = new lib(dataCollection, {
         id,
         verbose: false
@@ -206,22 +212,24 @@ if (Meteor.isClient) {
       for (let key of Object.keys(properties)) {
         test.equal(Match.test(inst[key], properties[key]), true);
       }
-    }).then(next);
+    })
+    .then(next);
   });
 
   Tinytest.addAsync('APIs - test state before starting', function (test, next) {
     const libOptions = {
       initialLimit: initialLoadLimit,
-      limitIncrement: loadIncrement
+      limitIncrement: loadIncrement,
+      verbose: false
     };
 
-    callPromise('newlib', libOptions).then((id) => {
+    callPromise('newlib', libOptions)
+    .then((id) => {
       // Server side is ready.
       // Instantiate client side.
       const inst = new lib(dataCollection, {
-        id,
-        verbose: false,
-        ...libOptions
+        ...libOptions,
+        id
       });
       saveInstance(id, inst);
 
@@ -234,31 +242,37 @@ if (Meteor.isClient) {
       test.equal(inst.countTotal(), 0);
       test.equal(inst.hasMore(), false);
       test.equal(inst.hasNew(), false);
-    }).then(next);
+    })
+    .then(next);
   });
 
   Tinytest.addAsync('APIs - test start, stop and ready cycle', function (test, next) {
     const libOptions = {
       initialLimit: initialLoadLimit,
-      limitIncrement: loadIncrement
+      limitIncrement: loadIncrement,
+      verbose: false
     };
 
-    callPromise('newlib', libOptions).then((id) => {
+    callPromise('newlib', libOptions)
+    .then((id) => {
       // Server side is ready.
       // Instantiate client side.
       const inst = new lib(dataCollection, {
-        id,
-        verbose: false,
-        ...libOptions
+        ...libOptions,
+        id
       });
       saveInstance(id, inst);
 
-      return inst.start();
-    }).then((inst) => {
+      return inst;
+    })
+    .then((inst) => inst.start())
+    .then((inst) => {
       test.ok();
 
-      return inst.stop();
-    }).then(next);
+      return inst;
+    })
+    .then((inst) => inst.stop())
+    .then(next);
   });
 
   Tinytest.addAsync('APIs - test stats after started', function (test, next) {
@@ -274,22 +288,24 @@ if (Meteor.isClient) {
         limitIncrement: loadIncrement,
         selector: {
           secret
-        }
+        },
+        verbose: false
       };
 
-
-      callPromise('newlib', libOptions).then((id) => {
+      callPromise('newlib', libOptions)
+      .then((id) => {
         // Server side is ready.
         // Instantiate client side.
         const inst = new lib(dataCollection, {
-          id,
-          verbose: false,
-          ...libOptions
+          ...libOptions,
+          id
         });
         saveInstance(id, inst);
 
-        return inst.start();
-      }).then((inst) => {
+        return inst;
+      })
+      .then((inst) => inst.start())
+      .then((inst) => {
         test.equal(inst.find({}).count(), initialLoadLimit);
         test.equal(inst.count(), initialLoadLimit);
         test.equal(inst.limit, initialLoadLimit);
@@ -299,8 +315,10 @@ if (Meteor.isClient) {
         test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
         test.equal(inst.hasNew(), false);
 
-        return inst.stop();
-      }).then(next);
+        return inst;
+      })
+      .then((inst) => inst.stop())
+      .then(next);
     });
   });
 
@@ -317,23 +335,25 @@ if (Meteor.isClient) {
         limitIncrement: loadIncrement,
         selector: {
           secret
-        }
+        },
+        verbose: false
       };
 
-      callPromise('newlib', libOptions).then((id) => {
+      callPromise('newlib', libOptions)
+      .then((id) => {
         // Server side is ready.
         // Instantiate client side.
         const inst = new lib(dataCollection, {
-          id,
-          verbose: false,
-          ...libOptions
+          ...libOptions,
+          id
         });
         saveInstance(id, inst);
 
-        return inst.start();
-      }).then((inst) => {
-        return inst.loadMore();
-      }).then((inst) => {
+        return inst;
+      })
+      .then((inst) => inst.start())
+      .then((inst) => inst.loadMore())
+      .then((inst) => {
         test.equal(inst.find({}).count(), initialLoadLimit + loadIncrement);
         test.equal(inst.count(), initialLoadLimit + loadIncrement);
         test.equal(inst.limit, initialLoadLimit + loadIncrement);
@@ -343,8 +363,10 @@ if (Meteor.isClient) {
         test.equal(inst.hasMore(), oldItemCount > (initialLoadLimit + loadIncrement));
         test.equal(inst.hasNew(), false);
 
-        return inst.stop();
-      }).then(next);
+        return inst;
+      })
+      .then((inst) => inst.stop())
+      .then(next);
     });
   });
 
@@ -361,21 +383,24 @@ if (Meteor.isClient) {
         limitIncrement: loadIncrement,
         selector: {
           secret
-        }
+        },
+        verbose: false
       };
 
-      callPromise('newlib', libOptions).then((id) => {
+      callPromise('newlib', libOptions)
+      .then((id) => {
         // Server side is ready.
         // Instantiate client side.
         const inst = new lib(dataCollection, {
-          id,
-          verbose: false,
-          ...libOptions
+          ...libOptions,
+          id
         });
         saveInstance(id, inst);
 
-        return inst.start();
-      }).then((inst) => {
+        return inst;
+      })
+      .then((inst) => inst.start())
+      .then((inst) => {
         const newItems = [];
 
         // Use loadIncrement for new item count.
@@ -388,7 +413,8 @@ if (Meteor.isClient) {
         return callPromise('insert', newItems).then((result) => {
           return inst.sync();
         });
-      }).then((inst) => {
+      })
+      .then((inst) => {
         test.equal(inst.find({}).count(), initialLoadLimit);
         test.equal(inst.count(), initialLoadLimit);
         test.equal(inst.limit, initialLoadLimit);
@@ -398,8 +424,10 @@ if (Meteor.isClient) {
         test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
         test.equal(inst.hasNew(), newItemCount > 0);
 
-        return inst.stop();
-      }).then(next);
+        return inst;
+      })
+      .then((inst) => inst.stop())
+      .then(next);
     });
   });
 
@@ -416,21 +444,24 @@ if (Meteor.isClient) {
         limitIncrement: loadIncrement,
         selector: {
           secret
-        }
+        },
+        verbose: false
       };
 
-      callPromise('newlib', libOptions).then((id) => {
+      callPromise('newlib', libOptions)
+      .then((id) => {
         // Server side is ready.
         // Instantiate client side.
         const inst = new lib(dataCollection, {
-          id,
-          verbose: false,
-          ...libOptions
+          ...libOptions,
+          id
         });
         saveInstance(id, inst);
 
-        return inst.start();
-      }).then((inst) => {
+        return inst;
+      })
+      .then((inst) => inst.start())
+      .then((inst) => {
         const newItems = [];
 
         // Use loadIncrement for new item count.
@@ -443,9 +474,9 @@ if (Meteor.isClient) {
         return callPromise('insert', newItems).then((result) => {
           return inst.sync();
         });
-      }).then((inst) => {
-        return inst.loadNew();
-      }).then((inst) => {
+      })
+      .then((inst) => inst.loadNew())
+      .then((inst) => {
         test.equal(inst.find({}).count(), initialLoadLimit + newItemCount);
         test.equal(inst.count(), initialLoadLimit + newItemCount);
         test.equal(inst.limit, initialLoadLimit + newItemCount);
@@ -455,26 +486,29 @@ if (Meteor.isClient) {
         test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
         test.equal(inst.hasNew(), false);
 
-        return inst.stop();
-      }).then(next);
+        return inst;
+      })
+      .then((inst) => inst.stop())
+      .then(next);
     });
   });
 
   Tinytest.addAsync('APIs - test sync and global ready events', function (test, next) {
     const libOptions = {
       initialLimit: initialLoadLimit,
-      limitIncrement: loadIncrement
+      limitIncrement: loadIncrement,
+      verbose: false
     };
 
     let readyCount = 0;
 
-    callPromise('newlib', libOptions).then((id) => {
+    callPromise('newlib', libOptions)
+    .then((id) => {
       // Server side is ready.
       // Instantiate client side.
       const inst = new lib(dataCollection, {
-        id,
-        verbose: false,
-        ...libOptions
+        ...libOptions,
+        id
       });
       saveInstance(id, inst);
 
@@ -482,46 +516,55 @@ if (Meteor.isClient) {
         readyCount += 1;
       });
 
-      return inst.start();
-    }).then((inst) => {
+      return inst;
+    })
+    .then((inst) => inst.start())
+    .then((inst) => {
       test.equal(readyCount, 0);
 
       return inst.sync();
-    }).then((inst) => {
+    })
+    .then((inst) => {
       test.equal(readyCount, 1);
 
-      return inst.stop();
-    }).then(next);
+      return inst;
+    })
+    .then((inst) => inst.stop())
+    .then(next);
   });
 
   Tinytest.addAsync('APIs - test setting and getting server parameters', function (test, next) {
     const libOptions = {
       initialLimit: initialLoadLimit,
-      limitIncrement: loadIncrement
+      limitIncrement: loadIncrement,
+      verbose: false
     };
 
     const secret = {
       secret: Meteor.uuid()
     };
 
-    callPromise('newlib', libOptions).then((id) => {
+    callPromise('newlib', libOptions)
+    .then((id) => {
       // Server side is ready.
       // Instantiate client side.
       const inst = new lib(dataCollection, {
-        id,
-        verbose: false,
-        ...libOptions
+        ...libOptions,
+        id
       });
       saveInstance(id, inst);
 
-      return inst.start();
-    }).then((inst) => {
-      return inst.setServerParameters(secret);
-    }).then((inst) => {
+      return inst;
+    })
+    .then((inst) => inst.start())
+    .then((inst) => inst.setServerParameters(secret))
+    .then((inst) => {
       test.equal(inst.getServerParameters(), secret);
 
-      return inst.stop();
-    }).then(next);
+      return inst;
+    })
+    .then((inst) => inst.stop())
+    .then(next);
   });
 
   Tinytest.add('Finishing - make sure all instances are stopped', function (test) {
