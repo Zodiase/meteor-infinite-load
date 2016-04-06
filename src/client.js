@@ -811,7 +811,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Force a new subscription with the current settings.
-   * This is used to wait for previous server updates to propagate to client.
+   * This is useful for waiting previous server updates to propagate to client.
    * If this called before starting, an error will be thrown.
    * @returns {Promise}
    */
