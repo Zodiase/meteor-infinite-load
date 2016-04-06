@@ -76,11 +76,11 @@ class InfiniLoadClient extends InfiniLoadBase {
      */
     me._runtime.running = false;
     /**
-     * Store the current request ID.
+     * Store the current request info.
      * Reset on start.
-     * @type {String}
+     * @type {ReactiveVar.<{requestId: String, parameters: Object}>}
      */
-    me._runtime.requestId = '';
+    me._runtime.requestInfo = new ReactiveVar(null, _.isEqual.bind(_));
     /**
      * Store the last request ID received from the stats document.
      * This value is used for checking if the request ID in the stats document has been changed.
@@ -431,16 +431,29 @@ class InfiniLoadClient extends InfiniLoadBase {
     if (instance._runtime.running) {
       self._markRequestStart(instance, requestId);
 
-      if (instance._runtime.subscription) {
-        instance._runtime.subscription.stop();
-        instance._runtime.subscription = null;
-      }
-      instance._runtime.subscription = instance._subscribe(instance.collectionName, parameters, self._onSubscriptionReady.bind(instance, requestId));
-
-      instance._runtime.requestId = requestId;
+      instance._runtime.requestInfo.set({
+        requestId,
+        parameters
+      });
     }
 
     return self._getActionPromise(instance, requestId);
+  }
+
+  /**
+   * An autorun for creating new subscriptions when needed.
+   * With this, Meteor can take care of connecting the old subscription to the new one.
+   * Never use directly and always use `.bind()` to set `this`.
+   * @private
+   */
+  static _autoSubscribe (comp) {
+    check(this, self);
+
+    const requestInfo = this._runtime.requestInfo.get();
+    if (requestInfo) {
+      const { requestId, parameters } = requestInfo;
+      this._runtime.subscription = this._subscribe(this.collectionName, parameters, self._onSubscriptionReady.bind(this, requestId));
+    }
   }
 
   /**
@@ -477,15 +490,17 @@ class InfiniLoadClient extends InfiniLoadBase {
       if (stats.requestId !== this._runtime.lastReceivedRequestId) {
         this._runtime.lastReceivedRequestId = stats.requestId;
 
-        this._log('request ready', stats.requestId, stats);
         requestId = stats.requestId;
+        this._log('request ready', requestId);
         eventName = 'ready';
       }
     } else {
       // Stats is deleted and we are stopping.
 
-      this._log('stop request ready', this._runtime.requestId);
-      requestId = this._runtime.requestId;
+      const requestInfo = Tracker.nonreactive(() => this._runtime.requestInfo.get());
+
+      requestId = requestInfo.requestId || '';
+      this._log('stop request ready', requestId);
       eventName = 'stop';
     }
 
@@ -516,7 +531,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @returns {InfiniLoadServer~StatsDocument}
    */
   get stats () {
-    return this.rawCollection.findOne(self._CONST.STATS_DOCUMENT_ID);
+    return this.rawCollection.find(self._CONST.STATS_DOCUMENT_ID).fetch()[0];
   }
 
   /**
@@ -782,7 +797,7 @@ class InfiniLoadClient extends InfiniLoadBase {
     this._runtime.starting = true;
 
     // Initialize variables.
-    this._runtime.requestId = '';
+    this._runtime.requestInfo.set(null);
     this._runtime.lastReceivedRequestId = '';
     this._runtime.findLimit = this._initialLimit;
     this._runtime.lastLoadTime = 0;
@@ -800,6 +815,7 @@ class InfiniLoadClient extends InfiniLoadBase {
       this._subscribe = Meteor.subscribe.bind(Meteor);
     }
 
+    this._runtime.computations['autoSubscribe'] = this._autorun(self._autoSubscribe.bind(this));
     this._runtime.computations['checkRequestReady'] = this._autorun(self._statsChangedAutorun.bind(this));
 
     const handle = self._newSubscription(this);
@@ -864,7 +880,7 @@ class InfiniLoadClient extends InfiniLoadBase {
       delete this._autorun;
       delete this._subscribe;
 
-      this._runtime.requestId = '';
+      this._runtime.requestInfo.set(null);
       this._runtime.lastReceivedRequestId = '';
       this._runtime.findLimit = 0;
       this._runtime.lastLoadTime = 0;
