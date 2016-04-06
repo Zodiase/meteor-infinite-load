@@ -5,7 +5,11 @@ import { Blaze } from 'meteor/blaze';
 import { Tracker } from 'meteor/tracker';
 import { check, Match } from 'meteor/check';
 import { ReactiveVar } from 'meteor/reactive-var';
+import { ReactiveDict } from 'meteor/reactive-dict';
 import { InfiniLoadBase } from './base.js';
+
+// Shortcut to `Tracker.nonreactive`.
+const __n = (func) => Tracker.nonreactive(func);
 
 /**
  * Client side interface for loading collection data incrementally.
@@ -70,32 +74,38 @@ class InfiniLoadClient extends InfiniLoadBase {
      */
     me._runtime = {};
 
-    /**
+    /*
+     * Namespace storing reactive data.
+     * @type {ReactiveDict}
+     */
+    me._runtime._ = new ReactiveDict();
+    /*
      * Indicate whether this instance is started.
+     * Reset on start.
      * @type {Boolean}
      */
-    me._runtime.running = false;
-    /**
+    me._runtime._.set('running', false);
+    /*
      * Store the current request info.
      * Reset on start.
-     * @type {ReactiveVar.<{requestId: String, parameters: Object}>}
+     * @type {null|{requestId: String, parameters: Object}}
      */
-    me._runtime.requestInfo = new ReactiveVar(null, _.isEqual.bind(_));
-    /**
+    me._runtime._.set('requestInfo', null);
+    /*
      * Store the last request ID received from the stats document.
      * This value is used for checking if the request ID in the stats document has been changed.
      * Reset on start.
      * @type {String}
      */
     me._runtime.lastReceivedRequestId = '';
-    /**
+    /*
      * Represent how many documents are requested from server.
      * This value could be changed by `.loadMore()` or `.loadNew()`.
      * Reset on start.
      * @type {Number}
      */
     me._runtime.findLimit = 0;
-    /**
+    /*
      * Represent when was the last request.
      * This value is sent with the subscription to allow server cut between new and old documents.
      * Reset on start.
@@ -103,12 +113,12 @@ class InfiniLoadClient extends InfiniLoadBase {
      * @type {Number}
      */
     me._runtime.lastLoadTime = 0;
-    /**
+    /*
      * Store computations.
      * @type {Object.<String, Object>}
      */
     me._runtime.computations = null;
-    /**
+    /*
      * Store the active subscription.
      * @type {Object}
      */
@@ -428,10 +438,10 @@ class InfiniLoadClient extends InfiniLoadBase {
     instance._log('new request', requestId, parameters);
     self._saveRequestParameters(instance, requestId, parameters);
 
-    if (instance._runtime.running) {
+    if (__n(() => instance._runtime._.get('running'))) {
       self._markRequestStart(instance, requestId);
 
-      instance._runtime.requestInfo.set({
+      instance._runtime._.set('requestInfo', {
         requestId,
         parameters
       });
@@ -449,7 +459,7 @@ class InfiniLoadClient extends InfiniLoadBase {
   static _autoSubscribe (comp) {
     check(this, self);
 
-    const requestInfo = this._runtime.requestInfo.get();
+    const requestInfo = this._runtime._.get('requestInfo');
     if (requestInfo) {
       const { requestId, parameters } = requestInfo;
       this._runtime.subscription = this._subscribe(this.collectionName, parameters, self._onSubscriptionReady.bind(this, requestId));
@@ -471,7 +481,7 @@ class InfiniLoadClient extends InfiniLoadBase {
     this._log('_statsChangedAutorun', {stats});
 
     // Both `stats` and `lastStats` are undefined when the connection is not ready yet.
-    if (!stats && !this._runtime.stopping) {
+    if (!stats && !__n(() => this._runtime._.get('stopping'))) {
       return;
     }
 
@@ -495,7 +505,7 @@ class InfiniLoadClient extends InfiniLoadBase {
         eventName = 'ready';
       }
     } else {
-      const requestInfo = Tracker.nonreactive(() => this._runtime.requestInfo.get());
+      const requestInfo = __n(() => this._runtime._.get('requestInfo'));
 
       if (requestInfo.requestId) {
         // Stats is deleted and we are stopping.
@@ -504,7 +514,7 @@ class InfiniLoadClient extends InfiniLoadBase {
         eventName = 'stop';
 
         requestInfo.requestId = '';
-        this._runtime.requestInfo.set(requestInfo);
+        this._runtime._.set('requestInfo', requestInfo);
       }
     }
 
@@ -550,10 +560,13 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Check if we are started. That is, we are running and no other flags are present.
+   * A reactive data source.
    * @returns {Boolean}
    */
   get started () {
-    return this._runtime.running && !this._runtime.starting && !this._runtime.stopping;
+    return this._runtime._.get('running') &&
+           !this._runtime._.get('starting') &&
+           !this._runtime._.get('stopping');
   }
 
   /*****************************************************************************
@@ -652,13 +665,13 @@ class InfiniLoadClient extends InfiniLoadBase {
   loadMore (amount = 0) {
     check(amount, Number);
 
-    if (!this.started) {
+    if (!__n(() => this.started)) {
       throw new Error('InfiniLoadClient ' + this.collectionName + ' has not started. Can not call `.loadMore()`.');
     }
 
     this._log('loadMore', amount);
 
-    const stats = Tracker.nonreactive(() => this.stats);
+    const stats = __n(() => this.stats);
 
     // Increase the load limit to include more old documents but does not exceed.
 
@@ -673,13 +686,13 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @returns {Promise}
    */
   loadNew () {
-    if (!this.started) {
+    if (!__n(() => this.started)) {
       throw new Error('InfiniLoadClient ' + this.collectionName + ' has not started. Can not call `.loadNew()`.');
     }
 
     this._log('loadNew');
 
-    const stats = Tracker.nonreactive(() => this.stats);
+    const stats = __n(() => this.stats);
 
     // 1. Set last load time to the latest document time.
     // 2. Increase the load limit to include all new documents.
@@ -789,19 +802,19 @@ class InfiniLoadClient extends InfiniLoadBase {
       throw new Error('InfiniLoadClient.start(template): `template` has to be an instance of Blaze Template.');
     }
 
-    if (this._runtime.running) {
+    if (__n(() => this._runtime._.get('running'))) {
       throw new Error('InfiniLoadClient ' + this.collectionName + ' is already running.');
     }
 
     this._log('starting...');
 
-    this._runtime.running = true;
+    this._runtime._.set('running', true);
 
     // Set a flag to indicate we are starting.
-    this._runtime.starting = true;
+    this._runtime._.set('starting', true);
 
     // Initialize variables.
-    this._runtime.requestInfo.set(null);
+    this._runtime._.set('requestInfo', null);
     this._runtime.lastReceivedRequestId = '';
     this._runtime.findLimit = this._initialLimit;
     this._runtime.lastLoadTime = 0;
@@ -824,7 +837,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
     const handle = self._newSubscription(this);
     return handle.then((inst) => {
-      delete this._runtime.starting;
+      this._runtime._.set('starting', false);
       this._log('started');
 
       return inst;
@@ -838,7 +851,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @returns {Promise}
    */
   sync () {
-    if (!this.started) {
+    if (!__n(() => this.started)) {
       throw new Error('InfiniLoadClient ' + this.collectionName + ' has not started. Can not call `.sync()`.');
     }
 
@@ -852,16 +865,16 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @returns {Promise}
    */
   stop () {
-    if (!this._runtime.running) {
+    if (!__n(() => this._runtime._.get('running'))) {
       throw new Error('InfiniLoadClient ' + this.collectionName + ' not running.');
-    } else if (this._runtime.starting) {
+    } else if (__n(() => this._runtime._.get('starting'))) {
       throw new Error('InfiniLoadClient ' + this.collectionName + ' can not be stopped while starting.');
     }
 
     this._log('stopping...');
 
     // Set a flag to indicate we are stopping.
-    this._runtime.stopping = true;
+    this._runtime._.set('stopping', true);
 
     const handle = self._newSubscription(this, true);
     return handle.then((inst) => {
@@ -884,15 +897,15 @@ class InfiniLoadClient extends InfiniLoadBase {
       delete this._autorun;
       delete this._subscribe;
 
-      this._runtime.requestInfo.set(null);
+      this._runtime._.set('requestInfo', null);
       this._runtime.lastReceivedRequestId = '';
       this._runtime.findLimit = 0;
       this._runtime.lastLoadTime = 0;
       this._requestDocuments.remove({});
 
-      this._runtime.running = false;
+      this._runtime._.set('running', false);
 
-      delete this._runtime.stopping;
+      this._runtime._.set('stopping', false);
       this._log('stopped');
 
       return inst;
