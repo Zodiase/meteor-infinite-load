@@ -3,6 +3,15 @@ import { check, Match } from 'meteor/check';
 import { InfiniLoadBase } from './base.js';
 
 /**
+ * @external Map
+ * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map}
+ */
+/**
+ * @external Set
+ * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set}
+ */
+
+/**
  * Server side interface for loading collection data incrementally.
  * @extends InfiniLoadBase
  */
@@ -42,7 +51,8 @@ class InfiniLoadServer extends InfiniLoadBase {
    * Use the add callback to add affiliated documents.
    * @callback InfiniLoadServer~Affiliation
    * @param {Object} doc
-   * @param {Function.<collection, id, fields>} add Same as `this.added` in `Meteor.publish`.
+   * @param {Function} add
+   *        Same as `this.added` in `Meteor.publish`; pass the collection name as the first parameter, document ID as the second, and the document as the third.
    */
 
   /**
@@ -196,7 +206,8 @@ class InfiniLoadServer extends InfiniLoadBase {
           affiliatedDocumentsByCollection = new Map(),
           /**
            * Stores records of affiliated documents. Indexed by core document ID.
-           * @type {Map. <DocumentId, Map.<CollectionName, Set.<DocumentId>>>}
+           * @ignore
+           * @type {Map.<DocumentId, Map.<CollectionName, Set.<DocumentId>>>}
            */
           affiliatedDocumentsByCoreDocId = new Map();
 
