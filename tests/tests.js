@@ -61,12 +61,11 @@ if (Meteor.isServer) {
       check(options, Object);
 
       if (typeof options.affiliation !== 'undefined') {
-        options.affiliation = function (cursor) {
-          const refIds = cursor.fetch().map((doc) => doc.refId);
-          return affiliatedCollection.find({
-            refId: {
-              $in: refIds
-            }
+        options.affiliation = function (doc, add) {
+          affiliatedCollection.find({
+            refId: doc.refId
+          }).forEach((affiliatedDocument) => {
+            add(affiliatedCollection._name, doc._id, doc);
           });
         };
       }
@@ -367,6 +366,18 @@ if (Meteor.isClient) {
         return inst;
       })
       .then((inst) => inst.stop())
+      .then((inst) => {
+        test.equal(inst.find({}).count(), 0);
+        test.equal(inst.count(), 0);
+        test.equal(inst.limit, 0);
+        test.equal(inst.countMore(), 0);
+        test.equal(inst.countNew(), 0);
+        test.equal(inst.countTotal(), 0);
+        test.equal(inst.hasMore(), false);
+        test.equal(inst.hasNew(), false);
+
+        return inst;
+      })
       .then(next);
     });
   });
@@ -673,20 +684,25 @@ if (Meteor.isClient) {
     })
     // Ask server to alter data.
     .then((inst) => {
+      // Make a randomized change.
+      const sourceId = Math.floor(Math.random() * (affiliation_docCount - 1)),
+            targetId = affiliation_docCount + Math.floor(Math.random() * (affiliation_docCount - 1));
+
+      // Make the change locally as well.
+      oldItems[sourceId].refId = targetId;
+
       return callPromise('update', {
         selector: {
           secret,
-          refId: 1
+          refId: sourceId
         },
         setObj: {
-          refId: 6
+          refId: targetId
         }
       }).then((result) => {
-        return inst;
-//         return inst.sync();
+        return inst.sync();
       });
     })
-/*
     // Confirm the existance of all affiliated documents.
     .then((inst) => {
       for (let item of oldItems) {
@@ -702,8 +718,7 @@ if (Meteor.isClient) {
       test.equal(affiliatedCollection.find().count(), 0);
       return inst;
     })
-    .then(next)
-*/;
+    .then(next);
   });
 
 

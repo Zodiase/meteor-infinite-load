@@ -39,10 +39,10 @@ class InfiniLoadServer extends InfiniLoadBase {
    */
 
   /**
-   * Return affiliated cursors.
+   * Use the add callback to add affiliated documents.
    * @callback InfiniLoadServer~Affiliation
-   * @param {Mongo.Cursor} cursor
-   * @returns {Mongo.Cursor|Array.<Mongo.Cursor>}
+   * @param {Object} doc
+   * @param {Function.<collection, id, fields>} add Same as `this.added` in `Meteor.publish`.
    */
 
   /**
@@ -59,7 +59,7 @@ class InfiniLoadServer extends InfiniLoadBase {
    *           The name and type of the field used for temporal sorting.
    *           If a `string` is provided, it is considered the name of the field and type is the default value `"number"`.
    * @property {InfiniLoadServer~Affiliation} [affiliation=null]
-   *           Use this function to return more cursors to be published alongside.
+   *           Use this function to add more documents to be published alongside.
    * @property {Number} [slowdown=0]
    *           How much time in milliseconds to wait before publishing data.
    */
@@ -187,7 +187,112 @@ class InfiniLoadServer extends InfiniLoadBase {
           newDocCount = 0,
           oldDocCount = 0,
           loadedDocuments = new Map(),
-          initializing = true;
+          initializing = true,
+          /**
+           * Stores records of affiliated documents. Indexed by collection.
+           * @ignore
+           * @type {Map.<CollectionName, Map.<DocumentId, {BoxedDocument}>>}
+           */
+          affiliatedDocumentsByCollection = new Map(),
+          /**
+           * Stores records of affiliated documents. Indexed by core document ID.
+           * @type {Map. <DocumentId, Map.<CollectionName, Set.<DocumentId>>>}
+           */
+          affiliatedDocumentsByCoreDocId = new Map();
+
+      // This function is passed to affiliation function since in order to add a document, multiple pieces of data are needed.
+      const addAffiliatedDocument = (coreDocId, collectionName, docId, doc) => {
+        check(coreDocId, String);
+        check(collectionName, String);
+        check(docId, String);
+        check(doc, Object);
+        check(doc._id, docId);
+
+        if (!affiliatedDocumentsByCollection.has(collectionName)) {
+          affiliatedDocumentsByCollection.set(collectionName, new Map());
+        }
+        // @type {Map.<DocumentId, {BoxedDocument}>}
+        const affiliatedDocumentsInCollection = affiliatedDocumentsByCollection.get(collectionName);
+
+        if (!affiliatedDocumentsInCollection.has(docId)) {
+          const boxedDocument = {
+            collectionName,
+            id: docId,
+            document: doc,
+            references: new Set([coreDocId])
+          };
+          affiliatedDocumentsInCollection.set(docId, boxedDocument);
+          connection.added(collectionName, docId, doc);
+        } else {
+          const boxedDocument = affiliatedDocumentsInCollection.get(docId);
+          // boxedDocument.collectionName === collectionName
+          // boxedDocument.id === docId
+          // boxedDocument.references.has(coreDocId) ?
+          if (!boxedDocument.references.has(coreDocId)) {
+            boxedDocument.references.add(coreDocId);
+          }
+          // boxedDocument.document === doc ?
+          if (!_.isEqual(boxedDocument.document, doc)) {
+            boxedDocument.document = doc;
+            connection.changed(collectionName, docId, doc);
+          }
+        }
+
+        // Save index by core document ID for fast searching.
+
+        if (!affiliatedDocumentsByCoreDocId.has(coreDocId)) {
+          affiliatedDocumentsByCoreDocId.set(coreDocId, new Map());
+        }
+        // @type {Map.<CollectionName, Set.<DocumentId>>}
+        const affiliatedDocumentsOfCoreDoc = affiliatedDocumentsByCoreDocId.get(coreDocId);
+
+        if (!affiliatedDocumentsOfCoreDoc.has(collectionName)) {
+          affiliatedDocumentsOfCoreDoc.set(collectionName, new Set());
+        }
+        // @type {Set.<DocumentId>}
+        const affiliatedDocumentsOfCoreDocInCollection = affiliatedDocumentsOfCoreDoc.get(collectionName);
+        affiliatedDocumentsOfCoreDocInCollection.add(docId);
+      };
+
+      // Removes all affiliated documents of a core document, used when the core document is being removed from the client.
+      const removeAffiliatedDocuments = (coreDocId) => {
+        if (affiliatedDocumentsByCoreDocId.has(coreDocId)) {
+          // @type {Map.<CollectionName, Set.<DocumentId>>}
+          const affiliatedDocumentsOfCoreDoc = affiliatedDocumentsByCoreDocId.get(coreDocId);
+
+          affiliatedDocumentsOfCoreDoc.forEach((/* @type {Set.<DocumentId>} */affiliatedDocIds, /* @type {String} */collectionName) => {
+            if (affiliatedDocumentsByCollection.has(collectionName)) {
+              // @type {Map.<DocumentId, {BoxedDocument}>}
+              const affiliatedDocumentsInCollection = affiliatedDocumentsByCollection.get(collectionName);
+
+              affiliatedDocIds.forEach((docId) => {
+                if (affiliatedDocumentsInCollection.has(docId)) {
+                  const boxedDocument = affiliatedDocumentsInCollection.get(docId);
+
+                  // Delete a reference.
+                  if (boxedDocument.references.has(coreDocId)) {
+                    boxedDocument.references.delete(coreDocId);
+                  }
+
+                  // If the affiliated document has no references, delete it.
+                  if (boxedDocument.references.size === 0) {
+                    affiliatedDocumentsInCollection.delete(docId);
+                    connection.removed(boxedDocument.collectionName, boxedDocument.id);
+                  }
+                }
+              });
+
+              // If the collection has no document in it, delete it.
+              if (affiliatedDocumentsInCollection.size === 0) {
+                affiliatedDocumentsByCollection.delete(collectionName);
+              }
+            }
+          });
+
+          // In the end, delete this index.
+          affiliatedDocumentsByCoreDocId.delete(coreDocId);
+        }
+      };
 
       const GenerateStatsDocument = () => {
         /**
@@ -270,7 +375,13 @@ class InfiniLoadServer extends InfiniLoadBase {
             newDocCount++;
           } else {
             oldDocCount++;
-            if (loadedDocuments.size < findLimit) {
+            if (!loadedDocuments.has(doc._id) && loadedDocuments.size < findLimit) {
+              // Send affiliated documents first.
+              if (affiliation) {
+                // Affiliation should use the second parameter to add documents.
+                affiliation(doc, addAffiliatedDocument.bind(me, doc._id));
+              }
+
               me._log('sending to client', doc._id);
               loadedDocuments.set(doc._id, doc);
               connection.added(me.collectionName, doc._id, doc);
@@ -287,9 +398,20 @@ class InfiniLoadServer extends InfiniLoadBase {
 
           //! Need to handle the time field changes in the future.
           if (loadedDocuments.has(oldDoc._id)) {
-            me._log('updating to client', oldDoc._id);
-            loadedDocuments.set(oldDoc._id, newDoc);
-            connection.changed(me.collectionName, oldDoc._id, newDoc);
+            const cachedDoc = loadedDocuments.get(oldDoc._id);
+            if (_.isEqual(cachedDoc, newDoc)) {
+              me._log('no change needed for client', oldDoc._id);
+            } else {
+              // Send affiliated documents first.
+              if (affiliation) {
+                // Affiliation should use the second parameter to add documents.
+                affiliation(newDoc, addAffiliatedDocument.bind(me, oldDoc._id));
+              }
+
+              me._log('updating to client', oldDoc._id);
+              loadedDocuments.set(oldDoc._id, newDoc);
+              connection.changed(me.collectionName, oldDoc._id, newDoc);
+            }
           }
         },
         'removed': (doc) => {
@@ -307,6 +429,11 @@ class InfiniLoadServer extends InfiniLoadBase {
           } else {
             oldDocCount--;
             if (loadedDocuments.has(doc._id)) {
+              // Send affiliated documents first.
+              if (affiliation) {
+                removeAffiliatedDocuments(doc._id);
+              }
+
               me._log('removing from client', doc._id);
               loadedDocuments.delete(doc._id);
               connection.removed(me.collectionName, doc._id);
@@ -318,89 +445,6 @@ class InfiniLoadServer extends InfiniLoadBase {
           }
         }
       });
-
-      /*************************************************************************
-      ! Affiliation with cursor is impossible without losing reactivity.
-      *************************************************************************/
-
-      // Affiliation.
-      if (affiliation) {
-        me._log('affiliation starts');
-
-        let affiliatedDocs = {};
-
-        // Add time selector.
-        const oldDocSelector = {};
-        oldDocSelector[timeFieldName] = {
-          '$lte': lastLoadTime_typed
-        };
-
-        // This is non-reactive.
-        const oldDocCursor = collection.find({
-          $and: [
-            oldDocSelector,
-            findSelector
-          ]
-        }, {
-          ...findOptions,
-          limit: findLimit
-        });
-
-        // This step could be reactive, depending on `affiliation`.
-        let affiliatedCursors = affiliation(oldDocCursor);
-        // Proceed only if returns anything.
-        if (affiliatedCursors) {
-          // Make it an array.
-          if (!Array.isArray(affiliatedCursors)) {
-            affiliatedCursors = [affiliatedCursors];
-          }
-          // Examine the array and handle Mongo.Cursor items.
-          for (let cursor of affiliatedCursors) {
-            // `cursor instanceof Mongo.Cursor` doesn't work.
-            if (cursor.observe) {
-              // "Publish" each cursors.
-
-              const collectionName = cursor._cursorDescription.collectionName;
-              if (typeof affiliatedDocs[collectionName] === 'undefined') {
-                affiliatedDocs[collectionName] = new Map();
-              }
-              const docs = affiliatedDocs[collectionName];
-
-              cursor.observe({
-                'added': (doc) => {
-                  if (docs.has(doc._id)) {
-                    const storedDoc = docs.get(doc._id);
-                    if (!_.isEqual(storedDoc, doc)) {
-                      connection.changed(collectionName, doc._id, doc);
-                      docs.set(doc._id, doc);
-                    }
-                  } else {
-                    connection.added(collectionName, doc._id, doc);
-                    docs.set(doc._id, doc);
-                  }
-                },
-                'changed': (newDoc, oldDoc) => {
-                  if (docs.has(oldDoc._id)) {
-                    connection.changed(collectionName, oldDoc._id, newDoc);
-                    docs.set(oldDoc._id, newDoc);
-                  } else {
-                    connection.added(collectionName, newDoc._id, newDoc);
-                    docs.set(newDoc._id, newDoc);
-                  }
-                },
-                'removed': (doc) => {
-                  if (docs.has(doc._id)) {
-                    connection.removed(collectionName, doc._id);
-                    docs.delete(doc._id);
-                  } else {
-                    // Do Nothing.
-                  }
-                }
-              });
-            }
-          }
-        }
-      }
 
       initializing = false;
 
