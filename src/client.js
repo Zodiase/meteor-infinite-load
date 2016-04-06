@@ -495,13 +495,17 @@ class InfiniLoadClient extends InfiniLoadBase {
         eventName = 'ready';
       }
     } else {
-      // Stats is deleted and we are stopping.
-
       const requestInfo = Tracker.nonreactive(() => this._runtime.requestInfo.get());
 
-      requestId = requestInfo.requestId || '';
-      this._log('stop request ready', requestId);
-      eventName = 'stop';
+      if (requestInfo.requestId) {
+        // Stats is deleted and we are stopping.
+        requestId = requestInfo.requestId;
+        this._log('stop request ready', requestId);
+        eventName = 'stop';
+
+        requestInfo.requestId = '';
+        this._runtime.requestInfo.set(requestInfo);
+      }
     }
 
     if (requestId && eventName) {
