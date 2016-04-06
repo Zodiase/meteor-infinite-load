@@ -2,6 +2,16 @@ Infinite Load for Meteor
 ========================
 A helper library for loading items from a collection incrementally and also know how many new items are available to be pulled.
 
+Design Principles
+------------------------
+- Only one subscription per instance which handles both data and stats synchronization.
+- Instance query methods feel identical to vanilla `Mongo.Collection` methods as stats documents are masked out.
+- All instance actions returns a `Promise` to which callbacks could be attached so code can run reliably when action results are ready.
+- Every instance has its own collection to avoid polluting anything else.
+- To make things simple and predictable, instances have only read methods.
+- Instantiation only leaves minimal side-effects.
+- Support affiliation to return related documents from multiple collections in one subscription.
+
 Get Started
 ------------------------
 ### Add the package:
@@ -15,7 +25,7 @@ $ meteor add zodiase:infinite-load
 import { InfiniLoad } from "meteor/zodiase:infinite-load";
 import { someCollection } from "./collections.js";
 
-InfiniLoad(someCollection);
+new InfiniLoad(someCollection);
 ```
 
 ### Client side setup:
@@ -24,7 +34,7 @@ import { Template } from 'meteor/templating'
 import { InfiniLoad } from "meteor/zodiase:infinite-load";
 import { someCollection } from "./collections.js";
 
-let infiniSomeData = InfiniLoad(someCollection);
+let infiniSomeData = new InfiniLoad(someCollection);
 
 Template.body.helpers({
   'dataReady' () {
