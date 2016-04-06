@@ -144,10 +144,12 @@ class InfiniLoadServer extends InfiniLoadBase {
         return;
       }
 
+      const initialLoad = options.lastLoadTime === 0;
+      me._log('initialLoad', String(initialLoad));
+
       const serverArgs = options.args || {};
       const findLimit = options.limit || 0;
-      // If `lastLoadTime` is not specified, it is `now`.
-      const lastLoadTime = options.lastLoadTime || now;
+      const lastLoadTime = initialLoad ? now : options.lastLoadTime;
 
       const findSelector = getFindSelector(userId, serverArgs);
       //! Current only support Object style sort options. Need to support array style.
@@ -222,11 +224,15 @@ class InfiniLoadServer extends InfiniLoadBase {
       }
 
       const addStatsDocumentToClient = () => {
-        connection.added(me.collectionName, self._CONST.STATS_DOCUMENT_ID, GenerateStatsDocument());
+        const newStatsDoc = GenerateStatsDocument();
+        me._log('newStatsDoc', newStatsDoc);
+        connection.added(me.collectionName, self._CONST.STATS_DOCUMENT_ID, newStatsDoc);
       };
 
       const changeStatsDocumentOnClient = () => {
-        connection.changed(me.collectionName, self._CONST.STATS_DOCUMENT_ID, GenerateStatsDocument());
+        const newStatsDoc = GenerateStatsDocument();
+        me._log('newStatsDoc', newStatsDoc);
+        connection.changed(me.collectionName, self._CONST.STATS_DOCUMENT_ID, newStatsDoc);
       };
 
       const observer = cursor.observe({
