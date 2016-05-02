@@ -1,4 +1,5 @@
 import { Meteor } from 'meteor/meteor';
+import { _ } from 'meteor/underscore';
 import { check, Match } from 'meteor/check';
 import { InfiniLoadBase } from './base.js';
 
