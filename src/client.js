@@ -578,6 +578,13 @@ class InfiniLoadClient extends InfiniLoadBase {
    * A reactive data source.
    */
   find (selector = {}, options = {}) {
+    // Make sure selector is an object.
+    if (typeof selector !== 'object') {
+      selector = {
+        _id: selector
+      };
+    }
+
     const realSelector = {
       // 'And' with `FILTER_STATS_DOCUMENT` to filter out the stats document.
       $and: [
