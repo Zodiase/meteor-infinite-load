@@ -18,8 +18,9 @@ Package.onUse(function(api) {
     'mongo',
     'blaze',
     'tracker',
+    'check',
     'reactive-var',
-    'zodiase:check'
+    'reactive-dict'
   ]);
   api.mainModule('src/server.js', 'server');
   api.mainModule('src/client.js', 'client');
