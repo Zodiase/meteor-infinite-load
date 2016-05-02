@@ -19,6 +19,7 @@ Package.onUse(function(api) {
     'blaze',
     'tracker',
     'reactive-var',
+    'reactive-dict',
     'zodiase:check'
   ]);
   api.mainModule('src/server.js', 'server');
