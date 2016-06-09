@@ -83,19 +83,32 @@ if (Meteor.isServer) {
       check(amount, Number);
       check(secret, String);
 
+      const docIds = new Array(amount);
+
       // Remove existing data to ensure the count is accurate.
       dataCollection.remove({
         secret
       });
 
       for (let i = 0; i < amount; ++i) {
-        dataCollection.insert({
+        const createTime = Date.now();
+        const docsWithSameCreateTime = dataCollection.find({ createTime });
+        const createTime_id = (docsWithSameCreateTime.count() > 0)
+                        ? docsWithSameCreateTime
+                          .fetch()
+                          .map((doc) => doc.createTime_id)
+                          .reduce((a, b) => Math.max(a, b)) + 1
+                        : 0;
+
+        const docId = dataCollection.insert({
           secret,
-          createTime: Date.now()
+          createTime_id,
+          createTime
         });
+        docIds.push(docId);
       }
 
-      return amount;
+      return docIds;
     },
     'insert' (docs) {
       if (!Array.isArray(docs)) {
@@ -106,8 +119,18 @@ if (Meteor.isServer) {
       const docIds = new Array(docs.length);
 
       for (let i = 0; i < docs.length; ++i) {
+        const createTime = Date.now();
+        const docsWithSameCreateTime = dataCollection.find({ createTime });
+        const createTime_id = (docsWithSameCreateTime.count() > 0)
+                        ? docsWithSameCreateTime
+                          .fetch()
+                          .map((doc) => doc.createTime_id)
+                          .reduce((a, b) => Math.max(a, b)) + 1
+                        : 0;
+
         delete docs[i]._id;
-        docs[i].createTime = Date.now();
+        docs[i].createTime_id = createTime_id;
+        docs[i].createTime = createTime;
         docIds[i] = dataCollection.insert(docs[i]);
       }
 
@@ -332,11 +355,20 @@ if (Meteor.isClient) {
             selector: {
               secret
             },
+            sort: {
+              createTime: -1,
+              createTime_id: -1
+            },
             verbose: false
           };
+    let preparedItemIds = null;
 
     callPromise('prepareData', oldItemCount, secret)
-    .then((result) => callPromise('newlib', libOptions))
+    .then((docIds) => {
+      preparedItemIds = docIds;
+
+      return callPromise('newlib', libOptions);
+    })
     .then((id) => {
       // Server side is ready.
       // Instantiate client side.
@@ -353,20 +385,27 @@ if (Meteor.isClient) {
       test.equal(inst.find({}).count(), initialLoadLimit);
       test.equal(inst.find({}).fetch().length, initialLoadLimit);
       test.equal(inst.count(), initialLoadLimit);
-      let sorted = true, lastItem = null;
-      inst.find({}).fetch().forEach((item) => {
-        if (lastItem && lastItem.createTime < item.createTime) {
-          sorted = false;
-        }
-        lastItem = item;
-      });
-      test.equal(sorted, true);
       test.equal(inst.limit, initialLoadLimit);
       test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
       test.equal(inst.countNew(), 0);
       test.equal(inst.countTotal(), oldItemCount);
       test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
       test.equal(inst.hasNew(), false);
+
+      // Loaded items should be all be found in prepared data.
+      let foundItemCount = 0;
+      inst.find({}).fetch().forEach((item, index) => {
+        if (preparedItemIds.indexOf(item._id) > -1) {
+          foundItemCount++;
+        }
+      });
+      test.equal(foundItemCount, initialLoadLimit);
+
+      // Loaded items should be the latest ones in prepared data.
+      inst.find({}).fetch().forEach((item, index) => {
+        const expectedIndex = preparedItemIds.length - 1 - index;
+        test.equal(preparedItemIds[expectedIndex], item._id);
+      });
 
       return inst;
     })
@@ -395,12 +434,21 @@ if (Meteor.isClient) {
             selector: {
               secret
             },
+            sort: {
+              createTime: -1,
+              createTime_id: -1
+            },
             verbose: false
           };
-    let itemsBeforeLoadMore = null;
+    let preparedItemIds = null,
+        itemsBeforeLoadMore = null;
 
     callPromise('prepareData', oldItemCount, secret)
-    .then(() => callPromise('newlib', libOptions))
+    .then((docIds) => {
+      preparedItemIds = docIds;
+
+      return callPromise('newlib', libOptions);
+    })
     .then((id) => {
       // Server side is ready.
       // Instantiate client side.
@@ -423,26 +471,28 @@ if (Meteor.isClient) {
       test.equal(inst.find({}).count(), initialLoadLimit + loadIncrement);
       test.equal(inst.find({}).fetch().length, initialLoadLimit + loadIncrement);
       test.equal(inst.count(), initialLoadLimit + loadIncrement);
-      let sorted = true, lastItem = null;
-      inst.find({}).fetch().forEach((item, index) => {
-        if (index < initialLoadLimit) {
-          test.equal(itemsBeforeLoadMore[index], item._id);
-        } else {
-          test.equal(itemsBeforeLoadMore.indexOf(item._id), -1);
-        }
-
-        if (lastItem && lastItem.createTime < item.createTime) {
-          sorted = false;
-        }
-        lastItem = item;
-      });
-      test.equal(sorted, true);
       test.equal(inst.limit, initialLoadLimit + loadIncrement);
       test.equal(inst.countMore(), oldItemCount - (initialLoadLimit + loadIncrement));
       test.equal(inst.countNew(), 0);
       test.equal(inst.countTotal(), oldItemCount);
       test.equal(inst.hasMore(), oldItemCount > (initialLoadLimit + loadIncrement));
       test.equal(inst.hasNew(), false);
+
+      inst.find({}).fetch().forEach((item, index) => {
+        if (index < initialLoadLimit) {
+          // The first ones are items before loadMore.
+          test.equal(itemsBeforeLoadMore.indexOf(item._id), index);
+        } else {
+          // The last ones are newly loaded items.
+          test.equal(itemsBeforeLoadMore.indexOf(item._id), -1);
+        }
+      });
+
+      // Loaded items should be the latest ones in prepared data.
+      inst.find({}).fetch().forEach((item, index) => {
+        const expectedIndex = preparedItemIds.length - 1 - index;
+        test.equal(preparedItemIds[expectedIndex], item._id);
+      });
 
       return inst;
     })
@@ -458,11 +508,21 @@ if (Meteor.isClient) {
             selector: {
               secret
             },
+            sort: {
+              createTime: -1,
+              createTime_id: -1
+            },
             verbose: false
           };
+    let preparedItemIds = null,
+        newItemIds = null;
 
     callPromise('prepareData', oldItemCount, secret)
-    .then(() => callPromise('newlib', libOptions))
+    .then((docIds) => {
+      preparedItemIds = docIds;
+
+      return callPromise('newlib', libOptions);
+    })
     .then((id) => {
       // Server side is ready.
       // Instantiate client side.
@@ -485,7 +545,9 @@ if (Meteor.isClient) {
         });
       }
 
-      return callPromise('insert', newItems).then((result) => {
+      return callPromise('insert', newItems).then((docIds) => {
+        newItemIds = docIds;
+
         return inst.sync();
       });
     })
@@ -499,6 +561,12 @@ if (Meteor.isClient) {
       test.equal(inst.countTotal(), oldItemCount + newItemCount);
       test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
       test.equal(inst.hasNew(), newItemCount > 0);
+
+      // Loaded items should be the latest ones in prepared data.
+      inst.find({}).fetch().forEach((item, index) => {
+        const expectedIndex = preparedItemIds.length - 1 - index;
+        test.equal(preparedItemIds[expectedIndex], item._id);
+      });
 
       return inst;
     })
@@ -514,13 +582,22 @@ if (Meteor.isClient) {
             selector: {
               secret
             },
+            sort: {
+              createTime: -1,
+              createTime_id: -1
+            },
             verbose: false
           };
-    let itemsBeforeLoadNew = null,
+    let preparedItemIds = null,
+        itemsBeforeLoadNew = null,
         newItemIds = null;
 
     callPromise('prepareData', oldItemCount, secret)
-    .then(() => callPromise('newlib', libOptions))
+    .then((docIds) => {
+      preparedItemIds = docIds;
+
+      return callPromise('newlib', libOptions);
+    })
     .then((id) => {
       // Server side is ready.
       // Instantiate client side.
@@ -550,6 +627,7 @@ if (Meteor.isClient) {
 
       return callPromise('insert', newItems).then((docIds) => {
         newItemIds = docIds;
+
         return inst.sync();
       });
     })
@@ -558,27 +636,21 @@ if (Meteor.isClient) {
       test.equal(inst.find({}).count(), initialLoadLimit + newItemCount);
       test.equal(inst.find({}).fetch().length, initialLoadLimit + newItemCount);
       test.equal(inst.count(), initialLoadLimit + newItemCount);
-      let sorted = true, lastItem = null;
-      inst.find({}).fetch().forEach((item, index) => {
-        if (index < newItemCount) {
-          test.equal(newItemIds[index], item._id);
-          test.equal(itemsBeforeLoadNew.indexOf(item._id), -1);
-        } else {
-          test.equal(itemsBeforeLoadNew[index - newItemCount], item._id);
-        }
-
-        if (lastItem && lastItem.createTime < item.createTime) {
-          sorted = false;
-        }
-        lastItem = item;
-      });
-      test.equal(sorted, true);
       test.equal(inst.limit, initialLoadLimit + newItemCount);
       test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
       test.equal(inst.countNew(), 0);
       test.equal(inst.countTotal(), oldItemCount + newItemCount);
       test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
       test.equal(inst.hasNew(), false);
+
+      // New items should be all be found in loaded data.
+      let foundNewItemCount = 0;
+      inst.find({}).fetch().forEach((item, index) => {
+        if (newItemIds.indexOf(item._id) > -1) {
+          foundNewItemCount++;
+        }
+      });
+      test.equal(foundNewItemCount, newItemCount);
 
       return inst;
     })
