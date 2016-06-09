@@ -324,233 +324,209 @@ if (Meteor.isClient) {
   });
 
   Tinytest.addAsync('APIs - test stats after started', function (test, next) {
-    const secret = Meteor.uuid();
+    const secret = Meteor.uuid(),
+          libOptions = {
+            initialLimit: initialLoadLimit,
+            limitIncrement: loadIncrement,
+            selector: {
+              secret
+            },
+            verbose: false
+          };
 
-    Meteor.call('prepareData', oldItemCount, secret, (error, result) => {
-      if (error) {
-        throw error;
-      }
+    callPromise('prepareData', oldItemCount, secret)
+    .then((result) => callPromise('newlib', libOptions))
+    .then((id) => {
+      // Server side is ready.
+      // Instantiate client side.
+      const inst = new lib(dataCollection, {
+        ...libOptions,
+        id
+      });
+      saveInstance(id, inst);
 
-      const libOptions = {
-        initialLimit: initialLoadLimit,
-        limitIncrement: loadIncrement,
-        selector: {
-          secret
-        },
-        verbose: false
-      };
+      return inst;
+    })
+    .then((inst) => inst.start())
+    .then((inst) => {
+      test.equal(inst.find({}).count(), initialLoadLimit);
+      test.equal(inst.count(), initialLoadLimit);
+      test.equal(inst.limit, initialLoadLimit);
+      test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
+      test.equal(inst.countNew(), 0);
+      test.equal(inst.countTotal(), oldItemCount);
+      test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
+      test.equal(inst.hasNew(), false);
 
-      callPromise('newlib', libOptions)
-      .then((id) => {
-        // Server side is ready.
-        // Instantiate client side.
-        const inst = new lib(dataCollection, {
-          ...libOptions,
-          id
-        });
-        saveInstance(id, inst);
+      return inst;
+    })
+    .then((inst) => inst.stop())
+    .then((inst) => {
+      test.equal(inst.find({}).count(), 0);
+      test.equal(inst.count(), 0);
+      test.equal(inst.limit, 0);
+      test.equal(inst.countMore(), 0);
+      test.equal(inst.countNew(), 0);
+      test.equal(inst.countTotal(), 0);
+      test.equal(inst.hasMore(), false);
+      test.equal(inst.hasNew(), false);
 
-        return inst;
-      })
-      .then((inst) => inst.start())
-      .then((inst) => {
-        test.equal(inst.find({}).count(), initialLoadLimit);
-        test.equal(inst.count(), initialLoadLimit);
-        test.equal(inst.limit, initialLoadLimit);
-        test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
-        test.equal(inst.countNew(), 0);
-        test.equal(inst.countTotal(), oldItemCount);
-        test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
-        test.equal(inst.hasNew(), false);
-
-        return inst;
-      })
-      .then((inst) => inst.stop())
-      .then((inst) => {
-        test.equal(inst.find({}).count(), 0);
-        test.equal(inst.count(), 0);
-        test.equal(inst.limit, 0);
-        test.equal(inst.countMore(), 0);
-        test.equal(inst.countNew(), 0);
-        test.equal(inst.countTotal(), 0);
-        test.equal(inst.hasMore(), false);
-        test.equal(inst.hasNew(), false);
-
-        return inst;
-      })
-      .then(next);
-    });
+      return inst;
+    })
+    .then(next);
   });
 
   Tinytest.addAsync('APIs - test `.loadMore()`', function (test, next) {
-    const secret = Meteor.uuid();
+    const secret = Meteor.uuid(),
+          libOptions = {
+            initialLimit: initialLoadLimit,
+            limitIncrement: loadIncrement,
+            selector: {
+              secret
+            },
+            verbose: false
+          };
 
-    Meteor.call('prepareData', oldItemCount, secret, (error, result) => {
-      if (error) {
-        throw error;
-      }
+    callPromise('prepareData', oldItemCount, secret)
+    .then(() => callPromise('newlib', libOptions))
+    .then((id) => {
+      // Server side is ready.
+      // Instantiate client side.
+      const inst = new lib(dataCollection, {
+        ...libOptions,
+        id
+      });
+      saveInstance(id, inst);
 
-      const libOptions = {
-        initialLimit: initialLoadLimit,
-        limitIncrement: loadIncrement,
-        selector: {
-          secret
-        },
-        verbose: false
-      };
+      return inst;
+    })
+    .then((inst) => inst.start())
+    .then((inst) => inst.loadMore())
+    .then((inst) => {
+      test.equal(inst.find({}).count(), initialLoadLimit + loadIncrement);
+      test.equal(inst.count(), initialLoadLimit + loadIncrement);
+      test.equal(inst.limit, initialLoadLimit + loadIncrement);
+      test.equal(inst.countMore(), oldItemCount - (initialLoadLimit + loadIncrement));
+      test.equal(inst.countNew(), 0);
+      test.equal(inst.countTotal(), oldItemCount);
+      test.equal(inst.hasMore(), oldItemCount > (initialLoadLimit + loadIncrement));
+      test.equal(inst.hasNew(), false);
 
-      callPromise('newlib', libOptions)
-      .then((id) => {
-        // Server side is ready.
-        // Instantiate client side.
-        const inst = new lib(dataCollection, {
-          ...libOptions,
-          id
-        });
-        saveInstance(id, inst);
-
-        return inst;
-      })
-      .then((inst) => inst.start())
-      .then((inst) => inst.loadMore())
-      .then((inst) => {
-        test.equal(inst.find({}).count(), initialLoadLimit + loadIncrement);
-        test.equal(inst.count(), initialLoadLimit + loadIncrement);
-        test.equal(inst.limit, initialLoadLimit + loadIncrement);
-        test.equal(inst.countMore(), oldItemCount - (initialLoadLimit + loadIncrement));
-        test.equal(inst.countNew(), 0);
-        test.equal(inst.countTotal(), oldItemCount);
-        test.equal(inst.hasMore(), oldItemCount > (initialLoadLimit + loadIncrement));
-        test.equal(inst.hasNew(), false);
-
-        return inst;
-      })
-      .then((inst) => inst.stop())
-      .then(next);
-    });
+      return inst;
+    })
+    .then((inst) => inst.stop())
+    .then(next);
   });
 
   Tinytest.addAsync('APIs - test stats after added new', function (test, next) {
-    const secret = Meteor.uuid();
+    const secret = Meteor.uuid(),
+          libOptions = {
+            initialLimit: initialLoadLimit,
+            limitIncrement: loadIncrement,
+            selector: {
+              secret
+            },
+            verbose: false
+          };
 
-    Meteor.call('prepareData', oldItemCount, secret, (error, result) => {
-      if (error) {
-        throw error;
+    callPromise('prepareData', oldItemCount, secret)
+    .then(() => callPromise('newlib', libOptions))
+    .then((id) => {
+      // Server side is ready.
+      // Instantiate client side.
+      const inst = new lib(dataCollection, {
+        ...libOptions,
+        id
+      });
+      saveInstance(id, inst);
+
+      return inst;
+    })
+    .then((inst) => inst.start())
+    .then((inst) => {
+      const newItems = [];
+
+      // Use loadIncrement for new item count.
+      for (let i = 0; i < newItemCount; ++i) {
+        newItems.push({
+          secret
+        });
       }
 
-      const libOptions = {
-        initialLimit: initialLoadLimit,
-        limitIncrement: loadIncrement,
-        selector: {
-          secret
-        },
-        verbose: false
-      };
+      return callPromise('insert', newItems).then((result) => {
+        return inst.sync();
+      });
+    })
+    .then((inst) => {
+      test.equal(inst.find({}).count(), initialLoadLimit);
+      test.equal(inst.count(), initialLoadLimit);
+      test.equal(inst.limit, initialLoadLimit);
+      test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
+      test.equal(inst.countNew(), newItemCount);
+      test.equal(inst.countTotal(), oldItemCount + newItemCount);
+      test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
+      test.equal(inst.hasNew(), newItemCount > 0);
 
-      callPromise('newlib', libOptions)
-      .then((id) => {
-        // Server side is ready.
-        // Instantiate client side.
-        const inst = new lib(dataCollection, {
-          ...libOptions,
-          id
-        });
-        saveInstance(id, inst);
-
-        return inst;
-      })
-      .then((inst) => inst.start())
-      .then((inst) => {
-        const newItems = [];
-
-        // Use loadIncrement for new item count.
-        for (let i = 0; i < newItemCount; ++i) {
-          newItems.push({
-            secret
-          });
-        }
-
-        return callPromise('insert', newItems).then((result) => {
-          return inst.sync();
-        });
-      })
-      .then((inst) => {
-        test.equal(inst.find({}).count(), initialLoadLimit);
-        test.equal(inst.count(), initialLoadLimit);
-        test.equal(inst.limit, initialLoadLimit);
-        test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
-        test.equal(inst.countNew(), newItemCount);
-        test.equal(inst.countTotal(), oldItemCount + newItemCount);
-        test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
-        test.equal(inst.hasNew(), newItemCount > 0);
-
-        return inst;
-      })
-      .then((inst) => inst.stop())
-      .then(next);
-    });
+      return inst;
+    })
+    .then((inst) => inst.stop())
+    .then(next);
   });
 
   Tinytest.addAsync('APIs - test `.loadNew()`', function (test, next) {
     const secret = Meteor.uuid();
+          libOptions = {
+            initialLimit: initialLoadLimit,
+            limitIncrement: loadIncrement,
+            selector: {
+              secret
+            },
+            verbose: false
+          };
 
-    Meteor.call('prepareData', oldItemCount, secret, (error, result) => {
-      if (error) {
-        throw error;
+    callPromise('prepareData', oldItemCount, secret)
+    .then(() => callPromise('newlib', libOptions))
+    .then((id) => {
+      // Server side is ready.
+      // Instantiate client side.
+      const inst = new lib(dataCollection, {
+        ...libOptions,
+        id
+      });
+      saveInstance(id, inst);
+
+      return inst;
+    })
+    .then((inst) => inst.start())
+    .then((inst) => {
+      const newItems = [];
+
+      // Use loadIncrement for new item count.
+      for (let i = 0; i < newItemCount; ++i) {
+        newItems.push({
+          secret
+        });
       }
 
-      const libOptions = {
-        initialLimit: initialLoadLimit,
-        limitIncrement: loadIncrement,
-        selector: {
-          secret
-        },
-        verbose: false
-      };
+      return callPromise('insert', newItems).then((result) => {
+        return inst.sync();
+      });
+    })
+    .then((inst) => inst.loadNew())
+    .then((inst) => {
+      test.equal(inst.find({}).count(), initialLoadLimit + newItemCount);
+      test.equal(inst.count(), initialLoadLimit + newItemCount);
+      test.equal(inst.limit, initialLoadLimit + newItemCount);
+      test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
+      test.equal(inst.countNew(), 0);
+      test.equal(inst.countTotal(), oldItemCount + newItemCount);
+      test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
+      test.equal(inst.hasNew(), false);
 
-      callPromise('newlib', libOptions)
-      .then((id) => {
-        // Server side is ready.
-        // Instantiate client side.
-        const inst = new lib(dataCollection, {
-          ...libOptions,
-          id
-        });
-        saveInstance(id, inst);
-
-        return inst;
-      })
-      .then((inst) => inst.start())
-      .then((inst) => {
-        const newItems = [];
-
-        // Use loadIncrement for new item count.
-        for (let i = 0; i < newItemCount; ++i) {
-          newItems.push({
-            secret
-          });
-        }
-
-        return callPromise('insert', newItems).then((result) => {
-          return inst.sync();
-        });
-      })
-      .then((inst) => inst.loadNew())
-      .then((inst) => {
-        test.equal(inst.find({}).count(), initialLoadLimit + newItemCount);
-        test.equal(inst.count(), initialLoadLimit + newItemCount);
-        test.equal(inst.limit, initialLoadLimit + newItemCount);
-        test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
-        test.equal(inst.countNew(), 0);
-        test.equal(inst.countTotal(), oldItemCount + newItemCount);
-        test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
-        test.equal(inst.hasNew(), false);
-
-        return inst;
-      })
-      .then((inst) => inst.stop())
-      .then(next);
-    });
+      return inst;
+    })
+    .then((inst) => inst.stop())
+    .then(next);
   });
 
   Tinytest.addAsync('APIs - test sync and global ready events', function (test, next) {
