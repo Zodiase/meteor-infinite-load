@@ -617,7 +617,7 @@ if (Meteor.isClient) {
       },
       // This asks the server method to fill in the test function.
       affiliation: true,
-      verbose: true
+      verbose: false
     };
 
     // Prepare "old" docs.
