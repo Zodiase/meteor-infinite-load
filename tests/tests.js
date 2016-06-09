@@ -283,6 +283,7 @@ if (Meteor.isClient) {
 
       // Check state before starting.
       test.equal(inst.find({}).count(), 0);
+      test.equal(inst.find({}).fetch().length, 0);
       test.equal(typeof inst.findOne({}), 'undefined');
       test.equal(inst.count(), 0);
       test.equal(inst.countMore(), 0);
@@ -350,7 +351,16 @@ if (Meteor.isClient) {
     .then((inst) => inst.start())
     .then((inst) => {
       test.equal(inst.find({}).count(), initialLoadLimit);
+      test.equal(inst.find({}).fetch().length, initialLoadLimit);
       test.equal(inst.count(), initialLoadLimit);
+      let sorted = true, lastItem = null;
+      inst.find({}).fetch().forEach((item) => {
+        if (lastItem && lastItem.createTime < item.createTime) {
+          sorted = false;
+        }
+        lastItem = item;
+      });
+      test.equal(sorted, true);
       test.equal(inst.limit, initialLoadLimit);
       test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
       test.equal(inst.countNew(), 0);
@@ -363,6 +373,7 @@ if (Meteor.isClient) {
     .then((inst) => inst.stop())
     .then((inst) => {
       test.equal(inst.find({}).count(), 0);
+      test.equal(inst.find({}).fetch().length, 0);
       test.equal(inst.count(), 0);
       test.equal(inst.limit, 0);
       test.equal(inst.countMore(), 0);
@@ -386,6 +397,7 @@ if (Meteor.isClient) {
             },
             verbose: false
           };
+    let itemsBeforeLoadMore = null;
 
     callPromise('prepareData', oldItemCount, secret)
     .then(() => callPromise('newlib', libOptions))
@@ -401,10 +413,30 @@ if (Meteor.isClient) {
       return inst;
     })
     .then((inst) => inst.start())
+    .then((inst) => {
+      itemsBeforeLoadMore = inst.find({}).fetch().map((item) => item._id);
+
+      return inst;
+    })
     .then((inst) => inst.loadMore())
     .then((inst) => {
       test.equal(inst.find({}).count(), initialLoadLimit + loadIncrement);
+      test.equal(inst.find({}).fetch().length, initialLoadLimit + loadIncrement);
       test.equal(inst.count(), initialLoadLimit + loadIncrement);
+      let sorted = true, lastItem = null;
+      inst.find({}).fetch().forEach((item, index) => {
+        if (index < initialLoadLimit) {
+          test.equal(itemsBeforeLoadMore[index], item._id);
+        } else {
+          test.equal(itemsBeforeLoadMore.indexOf(item._id), -1);
+        }
+
+        if (lastItem && lastItem.createTime < item.createTime) {
+          sorted = false;
+        }
+        lastItem = item;
+      });
+      test.equal(sorted, true);
       test.equal(inst.limit, initialLoadLimit + loadIncrement);
       test.equal(inst.countMore(), oldItemCount - (initialLoadLimit + loadIncrement));
       test.equal(inst.countNew(), 0);
@@ -459,6 +491,7 @@ if (Meteor.isClient) {
     })
     .then((inst) => {
       test.equal(inst.find({}).count(), initialLoadLimit);
+      test.equal(inst.find({}).fetch().length, initialLoadLimit);
       test.equal(inst.count(), initialLoadLimit);
       test.equal(inst.limit, initialLoadLimit);
       test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
@@ -483,6 +516,8 @@ if (Meteor.isClient) {
             },
             verbose: false
           };
+    let itemsBeforeLoadNew = null,
+        newItemIds = null;
 
     callPromise('prepareData', oldItemCount, secret)
     .then(() => callPromise('newlib', libOptions))
@@ -499,6 +534,11 @@ if (Meteor.isClient) {
     })
     .then((inst) => inst.start())
     .then((inst) => {
+      itemsBeforeLoadNew = inst.find({}).fetch().map((item) => item._id);
+
+      return inst;
+    })
+    .then((inst) => {
       const newItems = [];
 
       // Use loadIncrement for new item count.
@@ -508,14 +548,31 @@ if (Meteor.isClient) {
         });
       }
 
-      return callPromise('insert', newItems).then((result) => {
+      return callPromise('insert', newItems).then((docIds) => {
+        newItemIds = docIds;
         return inst.sync();
       });
     })
     .then((inst) => inst.loadNew())
     .then((inst) => {
       test.equal(inst.find({}).count(), initialLoadLimit + newItemCount);
+      test.equal(inst.find({}).fetch().length, initialLoadLimit + newItemCount);
       test.equal(inst.count(), initialLoadLimit + newItemCount);
+      let sorted = true, lastItem = null;
+      inst.find({}).fetch().forEach((item, index) => {
+        if (index < newItemCount) {
+          test.equal(newItemIds[index], item._id);
+          test.equal(itemsBeforeLoadNew.indexOf(item._id), -1);
+        } else {
+          test.equal(itemsBeforeLoadNew[index - newItemCount], item._id);
+        }
+
+        if (lastItem && lastItem.createTime < item.createTime) {
+          sorted = false;
+        }
+        lastItem = item;
+      });
+      test.equal(sorted, true);
       test.equal(inst.limit, initialLoadLimit + newItemCount);
       test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
       test.equal(inst.countNew(), 0);
