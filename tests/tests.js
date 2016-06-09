@@ -214,9 +214,9 @@ if (Meteor.isClient) {
   window.affiliatedCollection = affiliatedCollection;
 
   const initialLoadLimit = 3;
-  const loadIncrement = 5;
-  const oldItemCount = 37;
-  const newItemCount = 7;
+  const loadIncrement = 2;
+  const oldItemCount = 7;
+  const newItemCount = 2;
 
   // Helper for wrapping `Meteor.call` in a Promise.
   const callPromise = (methodName, ...options) => {
