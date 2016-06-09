@@ -196,9 +196,9 @@ if (Meteor.isClient) {
   const newItemCount = 7;
 
   // Helper for wrapping `Meteor.call` in a Promise.
-  const callPromise = (methodName, options) => {
+  const callPromise = (methodName, ...options) => {
     return new Promise((resolve, reject) => {
-      Meteor.call(methodName, options, (error, result) => {
+      Meteor.apply(methodName, options, false, (error, result) => {
         if (error) {
           reject(error);
         } else {
