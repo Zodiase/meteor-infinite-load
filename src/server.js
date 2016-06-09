@@ -365,6 +365,33 @@ class InfiniLoadServer extends InfiniLoadBase {
         connection.changed(me.collectionName, self._CONST.STATS_DOCUMENT_ID, newStatsDoc);
       };
 
+      // Queue up items to be sent to client.
+      // @type {Array.<Object>}
+      const itemsToSend = [],
+            sortingFields = Object.keys(findSort),
+            sortFunc = (a, b) => {
+              // Start with the first sorting field and calculate the result.
+              // If the result is inconclusive (=== 0), use the next sorting field
+              //     until the result is conclusive or the sorting fields run out.
+
+              let sortingFieldIndex = 0,
+                  sortingFieldName,
+                  sortingCondition,
+                  result;
+              do {
+                sortingFieldName = sortingFields[sortingFieldIndex];
+                sortingCondition = findSort[sortingFieldName];
+
+                result = (a[sortingFieldName] - b[sortingFieldName]) * sortingCondition;
+
+                sortingFieldIndex++;
+              } while (result === 0 && sortingFieldIndex < sortingFields.length);
+
+              return result;
+            };
+
+      // Important: the order in which observer goes over docs does NOT depend
+      //     on findSort. In fact it's the insertion order.
       const observer = cursor.observe({
         'added': (doc) => {
           me._log('added', doc._id, doc);
@@ -387,16 +414,15 @@ class InfiniLoadServer extends InfiniLoadBase {
             newDocCount++;
           } else {
             oldDocCount++;
-            if (!loadedDocuments.has(doc._id) && loadedDocuments.size < findLimit) {
-              // Send affiliated documents first.
-              if (affiliation) {
-                // Affiliation should use the second parameter to add documents.
-                affiliation(doc, addAffiliatedDocument.bind(me, doc._id));
-              }
 
-              me._log('sending to client', doc._id);
-              loadedDocuments.set(doc._id, doc);
-              connection.added(me.collectionName, doc._id, doc);
+            if (initializing) {
+              // When initializing, queue up all old docs in itemsToSend.
+              itemsToSend.push(doc);
+              // Sort right now and do a quick cut-off to avoid queuing up too many items.
+              itemsToSend.sort(sortFunc);
+              itemsToSend.length = Math.min(itemsToSend.length, findLimit);
+            } else {
+              // When not initializing, do not send old docs.
             }
           }
 
@@ -406,6 +432,12 @@ class InfiniLoadServer extends InfiniLoadBase {
         },
         'changed': (newDoc, oldDoc) => {
           me._log('changed', oldDoc._id, newDoc, oldDoc);
+
+          // Should not happen when initializing. But if it does, ignore it.
+          if (initializing) {
+            return;
+          }
+
           // Assume the time field never changes so we don't need to worry about documents jumping around in the list.
 
           //! Need to handle the time field changes in the future.
@@ -428,6 +460,11 @@ class InfiniLoadServer extends InfiniLoadBase {
         },
         'removed': (doc) => {
           me._log('removed', doc._id, doc);
+
+          // Should not happen when initializing. But if it does, ignore it.
+          if (initializing) {
+            return;
+          }
 
           // An removed document always counts towards total document count.
           totalDocCount--;
@@ -452,11 +489,25 @@ class InfiniLoadServer extends InfiniLoadBase {
             }
           }
 
-          if (!initializing) {
-            changeStatsDocumentOnClient();
-          }
+          changeStatsDocumentOnClient();
         }
       });
+
+      me._log('items to send', itemsToSend.map((doc) => doc._id));
+      // Send documents.
+      for (let i = 0, n = itemsToSend.length; i < n; ++i) {
+        const doc = itemsToSend[i];
+
+        // Send affiliated documents first.
+        if (affiliation) {
+          // Affiliation should use the second parameter to add documents.
+          affiliation(doc, addAffiliatedDocument.bind(me, doc._id));
+        }
+
+        me._log('sending to client', doc._id);
+        loadedDocuments.set(doc._id, doc);
+        connection.added(me.collectionName, doc._id, doc);
+      }
 
       initializing = false;
 
