@@ -7,9 +7,6 @@ import { InfiniLoad } from "meteor/zodiase:infinite-load";
 const dataCollection = new Mongo.Collection('test');
 const affiliatedCollection = new Mongo.Collection('test_affiliation');
 
-// Export to window for debugging in user-agent.
-if (Meteor.isClient) window.dataCollection = dataCollection;
-
 // Alias of the library namespace, make name changing easier.
 const lib = InfiniLoad;
 
@@ -347,6 +344,38 @@ if (Meteor.isClient) {
     .then(next);
   });
 
+  Tinytest.addAsync('APIs - test start, stop and ready cycle with a setServerParameters right after start', function (test, next) {
+    const libOptions = {
+      initialLimit: initialLoadLimit,
+      limitIncrement: loadIncrement,
+      verbose: false
+    };
+
+    callPromise('newlib', libOptions)
+    .then((id) => {
+      // Server side is ready.
+      // Instantiate client side.
+      const inst = new lib(dataCollection, {
+        ...libOptions,
+        id
+      });
+      saveInstance(id, inst);
+
+      return inst;
+    })
+    .then((inst) => {
+      inst.start();
+      return inst.setServerParameters({});
+    })
+    .then((inst) => {
+      test.ok();
+
+      return inst;
+    })
+    .then((inst) => inst.stop())
+    .then(next);
+  });
+
   Tinytest.addAsync('APIs - test stats after started', function (test, next) {
     const secret = Meteor.uuid(),
           libOptions = {
@@ -476,6 +505,86 @@ if (Meteor.isClient) {
       test.equal(inst.countNew(), 0);
       test.equal(inst.countTotal(), oldItemCount);
       test.equal(inst.hasMore(), oldItemCount > (initialLoadLimit + loadIncrement));
+      test.equal(inst.hasNew(), false);
+
+      inst.find({}).fetch().forEach((item, index) => {
+        if (index < initialLoadLimit) {
+          // The first ones are items before loadMore.
+          test.equal(itemsBeforeLoadMore.indexOf(item._id), index);
+        } else {
+          // The last ones are newly loaded items.
+          test.equal(itemsBeforeLoadMore.indexOf(item._id), -1);
+        }
+      });
+
+      // Loaded items should be the latest ones in prepared data.
+      inst.find({}).fetch().forEach((item, index) => {
+        const expectedIndex = preparedItemIds.length - 1 - index;
+        test.equal(preparedItemIds[expectedIndex], item._id);
+      });
+
+      return inst;
+    })
+    .then((inst) => inst.stop())
+    .then(next);
+  });
+
+  Tinytest.addAsync('APIs - test sequential `.loadMore()`s', function (test, next) {
+    const secret = Meteor.uuid(),
+          libOptions = {
+            initialLimit: initialLoadLimit,
+            limitIncrement: loadIncrement,
+            selector: {
+              secret
+            },
+            sort: {
+              createTime: -1,
+              createTime_id: -1
+            },
+            verbose: false
+          };
+    let preparedItemIds = null,
+        itemsBeforeLoadMore = null;
+
+    callPromise('prepareData', oldItemCount, secret)
+    .then((docIds) => {
+      preparedItemIds = docIds;
+
+      return callPromise('newlib', libOptions);
+    })
+    .then((id) => {
+      // Server side is ready.
+      // Instantiate client side.
+      const inst = new lib(dataCollection, {
+        ...libOptions,
+        id
+      });
+      saveInstance(id, inst);
+
+      return inst;
+    })
+    .then((inst) => inst.start())
+    .then((inst) => {
+      itemsBeforeLoadMore = inst.find({}).fetch().map((item) => item._id);
+
+      return inst;
+    })
+    .then((inst) => {
+      let lastPromise = null;
+      for (let i = initialLoadLimit, n = oldItemCount; i < n; i += loadIncrement) {
+        lastPromise = inst.loadMore();
+      }
+      return lastPromise;
+    })
+    .then((inst) => {
+      test.equal(inst.find({}).count(), oldItemCount);
+      test.equal(inst.find({}).fetch().length, oldItemCount);
+      test.equal(inst.count(), oldItemCount);
+      test.equal(inst.limit, oldItemCount);
+      test.equal(inst.countMore(), 0);
+      test.equal(inst.countNew(), 0);
+      test.equal(inst.countTotal(), oldItemCount);
+      test.equal(inst.hasMore(), false);
       test.equal(inst.hasNew(), false);
 
       inst.find({}).fetch().forEach((item, index) => {
@@ -632,6 +741,94 @@ if (Meteor.isClient) {
       });
     })
     .then((inst) => inst.loadNew())
+    .then((inst) => {
+      test.equal(inst.find({}).count(), initialLoadLimit + newItemCount);
+      test.equal(inst.find({}).fetch().length, initialLoadLimit + newItemCount);
+      test.equal(inst.count(), initialLoadLimit + newItemCount);
+      test.equal(inst.limit, initialLoadLimit + newItemCount);
+      test.equal(inst.countMore(), oldItemCount - initialLoadLimit);
+      test.equal(inst.countNew(), 0);
+      test.equal(inst.countTotal(), oldItemCount + newItemCount);
+      test.equal(inst.hasMore(), oldItemCount > initialLoadLimit);
+      test.equal(inst.hasNew(), false);
+
+      // New items should be all be found in loaded data.
+      let foundNewItemCount = 0;
+      inst.find({}).fetch().forEach((item, index) => {
+        if (newItemIds.indexOf(item._id) > -1) {
+          foundNewItemCount++;
+        }
+      });
+      test.equal(foundNewItemCount, newItemCount);
+
+      return inst;
+    })
+    .then((inst) => inst.stop())
+    .then(next);
+  });
+
+  Tinytest.addAsync('APIs - test sequential `.loadNew()`s', function (test, next) {
+    const secret = Meteor.uuid();
+          libOptions = {
+            initialLimit: initialLoadLimit,
+            limitIncrement: loadIncrement,
+            selector: {
+              secret
+            },
+            sort: {
+              createTime: -1,
+              createTime_id: -1
+            },
+            verbose: false
+          };
+    let preparedItemIds = null,
+        itemsBeforeLoadNew = null,
+        newItemIds = null;
+
+    callPromise('prepareData', oldItemCount, secret)
+    .then((docIds) => {
+      preparedItemIds = docIds;
+
+      return callPromise('newlib', libOptions);
+    })
+    .then((id) => {
+      // Server side is ready.
+      // Instantiate client side.
+      const inst = new lib(dataCollection, {
+        ...libOptions,
+        id
+      });
+      saveInstance(id, inst);
+
+      return inst;
+    })
+    .then((inst) => inst.start())
+    .then((inst) => {
+      itemsBeforeLoadNew = inst.find({}).fetch().map((item) => item._id);
+
+      return inst;
+    })
+    .then((inst) => {
+      const newItems = [];
+
+      // Use loadIncrement for new item count.
+      for (let i = 0; i < newItemCount; ++i) {
+        newItems.push({
+          secret
+        });
+      }
+
+      return callPromise('insert', newItems).then((docIds) => {
+        newItemIds = docIds;
+
+        return inst.sync();
+      });
+    })
+    .then((inst) => {
+      inst.loadNew();
+      inst.loadNew();
+      return inst.loadNew();
+    })
     .then((inst) => {
       test.equal(inst.find({}).count(), initialLoadLimit + newItemCount);
       test.equal(inst.find({}).fetch().length, initialLoadLimit + newItemCount);

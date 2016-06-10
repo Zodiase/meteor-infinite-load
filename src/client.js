@@ -86,6 +86,18 @@ class InfiniLoadClient extends InfiniLoadBase {
      */
     me._runtime._.set('running', false);
     /*
+     * Indicate whether this instance is working on a request.
+     * Reset on start.
+     * @type {Boolean}
+     */
+    me._runtime._.set('busy', false);
+    /*
+     * Indicate whether this instance is shutting down.
+     * Reset on start.
+     * @type {Boolean}
+     */
+    me._runtime._.set('stopping', false);
+    /*
      * Store the current request info.
      * Reset on start.
      * @type {null|{requestId: String, parameters: Object}}
@@ -123,6 +135,12 @@ class InfiniLoadClient extends InfiniLoadBase {
      * @type {Object}
      */
     me._runtime.subscription = null;
+
+    /*
+     * Store the IDs of queued requests.
+     * @type {Array.<String>}
+     */
+    me._runtime.requestQueue = [];
 
     /**
      * Arbitrary data sent with the subscription to be used by server-side callback functions.
@@ -295,6 +313,56 @@ class InfiniLoadClient extends InfiniLoadBase {
   }
 
   /**
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @param {String} requestId
+   */
+  static _startRequest (instance, requestId) {
+    check(instance, self);
+    check(requestId, String);
+
+    const parameters = self._loadRequestParameters(instance, requestId);
+
+    if (!parameters) {
+      throw new Error('Invalid request.');
+    }
+
+    instance._log('start request', requestId, parameters);
+    self._markRequestStart(instance, requestId);
+
+    instance._runtime._.set('requestInfo', { requestId, parameters });
+  }
+
+  /**
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @param {String} requestId
+   */
+  static _enqueueRequest (instance, requestId) {
+    check(instance, self);
+    check(requestId, String);
+
+    instance._log('enqueue request', requestId);
+
+    instance._runtime.requestQueue.push(requestId);
+  }
+
+  /**
+   * @private
+   * @param {InfiniLoadClient} instance
+   * @returns {String}
+   */
+  static _dequeueRequest (instance) {
+    check(instance, self);
+
+    const requestId = instance._runtime.requestQueue.shift();
+
+    instance._log('dequeue request', requestId);
+
+    return requestId;
+  }
+
+  /**
    * Helper function for marking the confirm time of a request in its request document.
    * @private
    * @param {InfiniLoadClient} instance
@@ -436,15 +504,22 @@ class InfiniLoadClient extends InfiniLoadBase {
       quit
     };
     instance._log('new request', requestId, parameters);
-    self._saveRequestParameters(instance, requestId, parameters);
 
-    if (__n(() => instance._runtime._.get('running'))) {
-      self._markRequestStart(instance, requestId);
+    // No requests are allowed when not started.
+    if (__n(() => instance.started)) {
 
-      instance._runtime._.set('requestInfo', {
-        requestId,
-        parameters
-      });
+      self._saveRequestParameters(instance, requestId, parameters);
+
+      if (__n(() => instance._runtime._.get('busy'))) {
+        // Queue the request.
+        self._enqueueRequest(instance, requestId);
+      } else {
+        instance._runtime._.set('busy', true);
+        self._startRequest(instance, requestId);
+      }
+
+    } else {
+      instance._log('discard request', requestId);
     }
 
     return self._getActionPromise(instance, requestId);
@@ -523,6 +598,21 @@ class InfiniLoadClient extends InfiniLoadBase {
 
       // Trigger callbacks outside of the autorun to avoid issues with Tracker.
       Meteor._setImmediate(self._callEventHandlers.bind(self, this, eventName, this, [this.originalCollection]));
+
+      this._log('end request', requestId);
+
+      if (!this.started) {
+        // Stopping. Do nothing.
+      } else {
+        const nextQueuedRequest = self._dequeueRequest(this);
+        if (!nextQueuedRequest) {
+          // Idle.
+          this._runtime._.set('busy', false);
+        } else {
+          // Still busy.
+          self._startRequest(this, nextQueuedRequest);
+        }
+      }
     }
   }
 
@@ -565,8 +655,16 @@ class InfiniLoadClient extends InfiniLoadBase {
    */
   get started () {
     return this._runtime._.get('running') &&
-           !this._runtime._.get('starting') &&
            !this._runtime._.get('stopping');
+  }
+
+  /**
+   * Check if we are busy.
+   * A reactive data source.
+   * @returns {Boolean}
+   */
+  get busy () {
+    return this._runtime._.get('busy');
   }
 
   /*****************************************************************************
@@ -682,7 +780,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
     // Increase the load limit to include more old documents but does not exceed.
 
-    this._runtime.findLimit = Math.min(stats.loadedDocCount + (amount || this._limitIncrement), stats.oldDocCount);
+    this._runtime.findLimit = Math.min(this._runtime.findLimit + (amount || this._limitIncrement), stats.oldDocCount);
 
     return self._newSubscription(this);
   }
@@ -704,8 +802,10 @@ class InfiniLoadClient extends InfiniLoadBase {
     // 1. Set last load time to the latest document time.
     // 2. Increase the load limit to include all new documents.
 
-    this._runtime.lastLoadTime = stats.latestDocTime;
-    this._runtime.findLimit = stats.loadedDocCount + stats.newDocCount;
+    if (stats.latestDocTime > this._runtime.lastLoadTime) {
+      this._runtime.lastLoadTime = stats.latestDocTime;
+      this._runtime.findLimit = this._runtime.findLimit + stats.newDocCount;
+    }
 
     return self._newSubscription(this);
   }
@@ -816,9 +916,8 @@ class InfiniLoadClient extends InfiniLoadBase {
     this._log('starting...');
 
     this._runtime._.set('running', true);
-
-    // Set a flag to indicate we are starting.
-    this._runtime._.set('starting', true);
+    this._runtime._.set('busy', false);
+    this._runtime._.set('stopping', false);
 
     // Initialize variables.
     this._runtime._.set('requestInfo', null);
@@ -844,7 +943,6 @@ class InfiniLoadClient extends InfiniLoadBase {
 
     const handle = self._newSubscription(this);
     return handle.then((inst) => {
-      this._runtime._.set('starting', false);
       this._log('started');
 
       return inst;
@@ -872,18 +970,17 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @returns {Promise}
    */
   stop () {
-    if (!__n(() => this._runtime._.get('running'))) {
+    if (!__n(() => this.started)) {
       throw new Error('InfiniLoadClient ' + this.collectionName + ' not running.');
-    } else if (__n(() => this._runtime._.get('starting'))) {
-      throw new Error('InfiniLoadClient ' + this.collectionName + ' can not be stopped while starting.');
     }
 
     this._log('stopping...');
 
+    // Get the handle before setting the stopping flag.
+    const handle = self._newSubscription(this, true);
+
     // Set a flag to indicate we are stopping.
     this._runtime._.set('stopping', true);
-
-    const handle = self._newSubscription(this, true);
     return handle.then((inst) => {
       // Stop all computations.
       for (let name of Object.keys(this._runtime.computations)) {
@@ -908,10 +1005,11 @@ class InfiniLoadClient extends InfiniLoadBase {
       this._runtime.lastReceivedRequestId = '';
       this._runtime.findLimit = 0;
       this._runtime.lastLoadTime = 0;
+      this._runtime.requestQueue.length = 0;
       this._requestDocuments.remove({});
 
       this._runtime._.set('running', false);
-
+      this._runtime._.set('busy', false);
       this._runtime._.set('stopping', false);
       this._log('stopped');
 
