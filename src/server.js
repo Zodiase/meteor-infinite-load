@@ -86,7 +86,7 @@ class InfiniLoadServer extends InfiniLoadBase {
     super(collection, options);
     const me = this;
 
-    me._log('construct', options);
+    me._log('construct', me._inspect({ options }));
 
     /***************************************************************************
       Check parameters.
@@ -155,7 +155,7 @@ class InfiniLoadServer extends InfiniLoadBase {
       // `Date.now()` is faster than `new Date().getTime()`.
       const now = Date.now();
 
-      me._log('subscribe', subscriptionId, options);
+      me._log('subscribe', me._inspect({ subscriptionId, options }));
 
       check(options, self._CONST.PUBLISH_OPTIONS_PATTERN);
 
@@ -167,7 +167,7 @@ class InfiniLoadServer extends InfiniLoadBase {
       }
 
       const initialLoad = options.lastLoadTime === 0;
-      me._log('initialLoad', String(initialLoad));
+      me._log('initialLoad', me._inspect({ initialLoad }));
 
       const serverArgs = options.args || {};
       const findLimit = options.limit || 0;
@@ -187,7 +187,7 @@ class InfiniLoadServer extends InfiniLoadBase {
         'fields': findFields
       };
 
-      me._log('find', findSelector, findOptions);
+      me._log('find', me._inspect({ findSelector, findOptions }));
 
       const cursor = collection.find(findSelector, findOptions);
 
@@ -355,13 +355,13 @@ class InfiniLoadServer extends InfiniLoadBase {
 
       const addStatsDocumentToClient = () => {
         const newStatsDoc = GenerateStatsDocument();
-        me._log('newStatsDoc', newStatsDoc);
+        me._log('newStatsDoc', me._inspect({ newStatsDoc }));
         connection.added(me.collectionName, self._CONST.STATS_DOCUMENT_ID, newStatsDoc);
       };
 
       const changeStatsDocumentOnClient = () => {
         const newStatsDoc = GenerateStatsDocument();
-        me._log('newStatsDoc', newStatsDoc);
+        me._log('newStatsDoc', me._inspect({ newStatsDoc }));
         connection.changed(me.collectionName, self._CONST.STATS_DOCUMENT_ID, newStatsDoc);
       };
 
@@ -394,7 +394,7 @@ class InfiniLoadServer extends InfiniLoadBase {
       //     on findSort. In fact it's the insertion order.
       const observer = cursor.observe({
         'added': (doc) => {
-          me._log('added', doc._id, doc);
+          me._log('added', doc._id, me._inspect({ doc }));
 
           // An added document always counts towards total document count.
           totalDocCount++;
@@ -431,7 +431,7 @@ class InfiniLoadServer extends InfiniLoadBase {
           }
         },
         'changed': (newDoc, oldDoc) => {
-          me._log('changed', oldDoc._id, newDoc, oldDoc);
+          me._log('changed', oldDoc._id, me._inspect({ newDoc, oldDoc }));
 
           // Should not happen when initializing. But if it does, ignore it.
           if (initializing) {
@@ -459,7 +459,7 @@ class InfiniLoadServer extends InfiniLoadBase {
           }
         },
         'removed': (doc) => {
-          me._log('removed', doc._id, doc);
+          me._log('removed', doc._id, me._inspect({ doc }));
 
           // Should not happen when initializing. But if it does, ignore it.
           if (initializing) {
@@ -493,7 +493,7 @@ class InfiniLoadServer extends InfiniLoadBase {
         }
       });
 
-      me._log('items to send', itemsToSend.map((doc) => doc._id));
+      me._log('items to send', me._inspect(itemsToSend.map((doc) => doc._id)));
       // Send documents.
       for (let i = 0, n = itemsToSend.length; i < n; ++i) {
         const doc = itemsToSend[i];
