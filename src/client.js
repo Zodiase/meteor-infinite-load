@@ -478,7 +478,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
     const stats = this.stats;
 
-    this._log('_statsChangedAutorun', {stats});
+    this._log('_statsChangedAutorun', { stats });
 
     // Both `stats` and `lastStats` are undefined when the connection is not ready yet.
     if (!stats && !__n(() => this._runtime._.get('stopping'))) {

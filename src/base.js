@@ -57,6 +57,9 @@ class InfiniLoadBase {
    * @returns {String}
    */
   static getInstanceCollectionName (collectionName, instanceId) {
+    check(collectionName, String);
+    check(instanceId, String);
+
     const d = self._CONST.NAMESPACE_DELIMITER;
 
     return self._CONST.COLLECTION_NAMESPACE +
@@ -69,6 +72,8 @@ class InfiniLoadBase {
    * @param {InfiniLoadBase} instance
    */
   static _registerInstance (instance) {
+    check(instance, self);
+
     // Shortcut.
     const instances = self._DATA.instances;
 
