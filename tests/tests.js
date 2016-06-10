@@ -7,9 +7,6 @@ import { InfiniLoad } from "meteor/zodiase:infinite-load";
 const dataCollection = new Mongo.Collection('test');
 const affiliatedCollection = new Mongo.Collection('test_affiliation');
 
-// Export to window for debugging in user-agent.
-if (Meteor.isClient) window.dataCollection = dataCollection;
-
 // Alias of the library namespace, make name changing easier.
 const lib = InfiniLoad;
 
