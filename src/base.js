@@ -154,6 +154,8 @@ class InfiniLoadBase {
           result = val.length > self._CONST.INSPECT_ARRAY_MAX_LEN
                    ? val.slice(0, self._CONST.INSPECT_ARRAY_MAX_LEN).concat(' ... ')
                    : val;
+        } else if (val === null) {
+          result = val;
         } else {
           if (depth > maxDepth) {
             result = '[object Object]';
