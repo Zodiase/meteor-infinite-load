@@ -121,7 +121,51 @@ class InfiniLoadBase {
    * @private
    */
   _log () {
-    console.log('InfiniLoad', this.collectionName, ...arguments);
+    console.log('* InfiniLoad >', this.collectionName, '>',  ...arguments);
+  }
+
+  /**
+   * Create a simple version of the input for displaying.
+   * @param {*} val
+   * @param {Number} [maxDepth=2]
+   * @param {Number} [depth=0]
+   * @returns {*}
+   * @private
+   */
+  _inspect (val, maxDepth = 2, depth = 0) {
+    check(maxDepth, Number);
+    check(depth, Number);
+
+    let result;
+
+    switch (typeof val) {
+      case 'string':
+        result = val.length > self._CONST.INSPECT_STRING_MAX_LEN
+                 ? val.substr(0, self._CONST.INSPECT_STRING_LEFT_KEPT) + ' ... ' + val.substr(-self._CONST.INSPECT_STRING_RIGHT_KEPT)
+                 : val;
+        break;
+      case 'object':
+        if (Array.isArray(val)) {
+          result = val.length > self._CONST.INSPECT_ARRAY_MAX_LEN
+                   ? val.slice(0, self._CONST.INSPECT_ARRAY_MAX_LEN).concat(' ... ')
+                   : val;
+        } else {
+          if (depth > maxDepth) {
+            result = '[object Object]';
+          } else {
+            result = {};
+            for (let key of Object.keys(val)) {
+              result[key] = this._inspect(val[key], maxDepth, depth + 1);
+            }
+          }
+        }
+        break;
+      default:
+        result = val;
+        break;
+    }
+    
+    return result;
   }
 }
 const self = InfiniLoadBase;
@@ -136,6 +180,10 @@ InfiniLoadBase._CONST = {
   COLLECTION_NAMESPACE: '__InfiniLoad',
   NAMESPACE_DELIMITER: '/',
   STATS_DOCUMENT_ID: 0,
+  INSPECT_STRING_MAX_LEN: 255,
+  INSPECT_STRING_LEFT_KEPT: 170,
+  INSPECT_STRING_RIGHT_KEPT: 80,
+  INSPECT_ARRAY_MAX_LEN: 15,
   OP_NOOP: () => {},
   OP_RETURN_THIS: function () {
     return this;
