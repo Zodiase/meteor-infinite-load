@@ -1,0 +1,28 @@
+{
+  "name": "meteor-infinite-load",
+  "version": "0.2.0",
+  "description": "A helper library for loading items from a collection incrementally.",
+  "main": "package.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "lint": "eslint src/*.js",
+    "docgen": "jsdoc2md src/*.js > doc.md",
+    "test": "meteor test-packages ./"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zodiase/meteor-infinite-load.git"
+  },
+  "author": "Xingchen Hong",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/Zodiase/meteor-infinite-load/issues"
+  },
+  "homepage": "https://github.com/Zodiase/meteor-infinite-load#readme",
+  "devDependencies": {
+    "eslint": "^2.12.0",
+    "jsdoc-to-markdown": "^1.3.6"
+  }
+}
