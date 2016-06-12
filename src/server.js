@@ -511,12 +511,16 @@ class InfiniLoadServer extends InfiniLoadBase {
 
       initializing = false;
 
-      addStatsDocumentToClient();
-
-      connection.ready();
       connection.onStop(() => {
         observer.stop();
       });
+
+      if (slowdown > 0) {
+        Meteor._sleepForMs(slowdown);
+      }
+
+      addStatsDocumentToClient();
+      connection.ready();
     });
     me._log('published');
   }
