@@ -4,11 +4,10 @@ import { Mongo } from 'meteor/mongo';
 import { Blaze } from 'meteor/blaze';
 import { Tracker } from 'meteor/tracker';
 import { check, Match } from 'meteor/check';
-import { ReactiveVar } from 'meteor/reactive-var';
 import { ReactiveDict } from 'meteor/reactive-dict';
 import { InfiniLoadBase } from './base.js';
 
-// Shortcut to `Tracker.nonreactive`.
+// Shortcut to 'Tracker.nonreactive'.
 const __n = (func) => Tracker.nonreactive(func);
 
 /**
@@ -24,7 +23,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @property {Number} [initialLimit=10]
    *           The max number of documents to load on start.
    * @property {Number} [limitIncrement=initialLimit]
-   *           The number of additional documents to load on `.loadMore()` by default.
+   *           The number of additional documents to load on '#loadMore()' by default.
    */
 
   /**
@@ -55,7 +54,7 @@ class InfiniLoadClient extends InfiniLoadBase {
      */
     me._initialLimit = options.initialLimit || 10;
     /**
-     * How many more documents to load by default when `.loadMore()` is called.
+     * How many more documents to load by default when '#loadMore()' is called.
      * @private
      * @readonly
      * @type {Number}
@@ -118,7 +117,7 @@ class InfiniLoadClient extends InfiniLoadBase {
     me._runtime.lastReceivedRequestId = '';
     /*
      * Represent how many documents are requested from server.
-     * This value could be changed by `.loadMore()` or `.loadNew()`.
+     * This value could be changed by '#loadMore()' or '#loadNew()'.
      * Reset on start.
      * @type {Number}
      */
@@ -419,7 +418,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Callback when a subscription call returns.
-   * Never use directly and always use `.bind()` to set `this`.
+   * Never use directly and always use '#bind()' to set 'this'.
    * @private
    * @param {String} requestId
    */
@@ -433,11 +432,11 @@ class InfiniLoadClient extends InfiniLoadBase {
 
   /**
    * Helper function for saving a promise (its resolve and reject methods to be exact) to the request document.
-   * Never use directly and always use `.bind()` to set `this`.
+   * Never use directly and always use '#bind()' to set 'this'.
    * @private
    * @param {String} requestId
-   * @param {Function} resolve `resolve` from a Promise constructor.
-   * @param {Function} reject `reject` from a Promise constructor.
+   * @param {Function} resolve 'resolve' from a Promise constructor.
+   * @param {Function} reject 'reject' from a Promise constructor.
    */
   static _saveActionPromise (requestId, resolve, reject) {
     check(this, self);
@@ -479,7 +478,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @private
    * @param {InfiniLoadClient} instance
    * @param {Boolean} [quit=false]
-   *        Set to `true` to subscribe to an empty data source to clean up the collection.
+   *        Set to 'true' to subscribe to an empty data source to clean up the collection.
    * @returns {Promise}
    */
   static _newSubscription (instance, quit = false) {
@@ -500,7 +499,7 @@ class InfiniLoadClient extends InfiniLoadBase {
      *           Cut-off time between new and old documents.
      *           This is tracked by the client so other parameters can be changed without moving the cut-off line.
      * @property {Boolean} quit
-     *           Set to `true` to ask server to clean up subscription.
+     *           Set to 'true' to ask server to clean up subscription.
      */
     const parameters = {
       requestId,
@@ -534,7 +533,7 @@ class InfiniLoadClient extends InfiniLoadBase {
   /**
    * An autorun for creating new subscriptions when needed.
    * With this, Meteor can take care of connecting the old subscription to the new one.
-   * Never use directly and always use `.bind()` to set `this`.
+   * Never use directly and always use '#bind()' to set 'this'.
    * @private
    */
   static _autoSubscribe (comp) {
@@ -551,7 +550,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    * Autorun when stats are changed.
    * It checks what requests are ready by fetching the stats document, from
    *     which it gets the latest request ID and triggers its callbacks.
-   * Never use directly and always use `.bind()` to set `this`.
+   * Never use directly and always use '#bind()' to set 'this'.
    * @private
    */
   static _statsChangedAutorun (comp) {
@@ -561,7 +560,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
     this._log('_statsChangedAutorun', { stats });
 
-    // Both `stats` and `lastStats` are undefined when the connection is not ready yet.
+    // Both 'stats' and 'lastStats' are undefined when the connection is not ready yet.
     if (!stats && !__n(() => this._runtime._.get('stopping'))) {
       return;
     }
@@ -660,22 +659,20 @@ class InfiniLoadClient extends InfiniLoadBase {
    * @returns {Boolean}
    */
   get started () {
-    return this._runtime._.get('running') &&
-           !this._runtime._.get('stopping');
+    return this._runtime._.get('running') && !this._runtime._.get('stopping');
   }
 
   /**
-   * Returns true if started and not starting.
+   * Returns true if data is ready.
    * A reactive data source.
    * @returns {Boolean}
    */
   get ready () {
-    return this.started &&
-           !this._runtime._.get('starting');
+    return this.started && !this._runtime._.get('starting');
   }
 
   /**
-   * Check if we are busy.
+   * Returns true if there are unresolved requests.
    * A reactive data source.
    * @returns {Boolean}
    */
@@ -688,19 +685,17 @@ class InfiniLoadClient extends InfiniLoadBase {
   *****************************************************************************/
 
   /**
-   * Same as `Mongo.Collection.prototype.find`.
+   * Same as 'Mongo.Collection#find'.
    * A reactive data source.
    */
   find (selector = {}, options = {}) {
     // Make sure selector is an object.
     if (typeof selector !== 'object') {
-      selector = {
-        _id: selector
-      };
+      return this.find({ _id: selector }, options);
     }
 
     const realSelector = {
-      // 'And' with `FILTER_STATS_DOCUMENT` to filter out the stats document.
+      // 'And' with 'FILTER_STATS_DOCUMENT' to filter out the stats document.
       $and: [
         self._CONST.FILTER_STATS_DOCUMENT,
         selector
@@ -710,7 +705,7 @@ class InfiniLoadClient extends InfiniLoadBase {
   }
 
   /**
-   * Same as `Mongo.Collection.prototype.findOne`.
+   * Same as 'Mongo.Collection#findOne'.
    * A reactive data source.
    */
   findOne (selector = {}, options = {}) {
@@ -759,7 +754,7 @@ class InfiniLoadClient extends InfiniLoadBase {
   }
 
   /**
-   * Returns `true` if there are more old documents to load.
+   * Returns 'true' if there are more old documents to load.
    * A reactive data source.
    * @returns {Boolean}
    */
@@ -768,7 +763,7 @@ class InfiniLoadClient extends InfiniLoadBase {
   }
 
   /**
-   * Returns `true` if there are more new documents to load.
+   * Returns 'true' if there are more new documents to load.
    * A reactive data source.
    * @returns {Boolean}
    */
@@ -787,7 +782,7 @@ class InfiniLoadClient extends InfiniLoadBase {
     check(amount, Number);
 
     if (!__n(() => this.started)) {
-      throw new Error('InfiniLoadClient ' + this.collectionName + ' has not started. Can not call `.loadMore()`.');
+      throw new Error(`InfiniLoadClient ${this.collectionName} has not started. Can not call '#loadMore()'.`);
     }
 
     this._log('loadMore', amount);
@@ -808,7 +803,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    */
   loadNew () {
     if (!__n(() => this.started)) {
-      throw new Error('InfiniLoadClient ' + this.collectionName + ' has not started. Can not call `.loadNew()`.');
+      throw new Error(`InfiniLoadClient ${this.collectionName} has not started. Can not call '#loadNew()'.`);
     }
 
     this._log('loadNew');
@@ -892,7 +887,7 @@ class InfiniLoadClient extends InfiniLoadBase {
     // Shortcut.
     const eList = self._CONST.SUPPORTED_EVENTS;
 
-    let eventsAry;
+    let eventsAry = null;
 
     if (typeof events === 'undefined') {
       // Remove all handlers.
@@ -922,11 +917,11 @@ class InfiniLoadClient extends InfiniLoadBase {
    */
   start (template) {
     if (typeof template !== 'undefined' && !(template instanceof Blaze.TemplateInstance)) {
-      throw new Error('InfiniLoadClient.start(template): `template` has to be an instance of Blaze Template.');
+      throw new Error(`InfiniLoadClient.start(template): 'template' has to be an instance of Blaze Template.`);
     }
 
     if (__n(() => this._runtime._.get('running'))) {
-      throw new Error('InfiniLoadClient ' + this.collectionName + ' is already running.');
+      throw new Error(`InfiniLoadClient ${this.collectionName} is already running.`);
     }
 
     this._log('starting...');
@@ -955,8 +950,8 @@ class InfiniLoadClient extends InfiniLoadBase {
       this._subscribe = Meteor.subscribe.bind(Meteor);
     }
 
-    this._runtime.computations['autoSubscribe'] = this._autorun(self._autoSubscribe.bind(this));
-    this._runtime.computations['checkRequestReady'] = this._autorun(self._statsChangedAutorun.bind(this));
+    this._runtime.computations.autoSubscribe = this._autorun(self._autoSubscribe.bind(this));
+    this._runtime.computations.checkRequestReady = this._autorun(self._statsChangedAutorun.bind(this));
 
     const handle = self._newSubscription(this);
     return handle.then((inst) => {
@@ -974,7 +969,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    */
   sync () {
     if (!__n(() => this.started)) {
-      throw new Error('InfiniLoadClient ' + this.collectionName + ' has not started. Can not call `.sync()`.');
+      throw new Error(`InfiniLoadClient ${this.collectionName} has not started. Can not call '#sync()'.`);
     }
 
     this._log('sync');
@@ -988,7 +983,7 @@ class InfiniLoadClient extends InfiniLoadBase {
    */
   stop () {
     if (!__n(() => this.started)) {
-      throw new Error('InfiniLoadClient ' + this.collectionName + ' not running.');
+      throw new Error(`InfiniLoadClient ${this.collectionName} not running.`);
     }
 
     this._log('stopping...');
@@ -1010,7 +1005,7 @@ class InfiniLoadClient extends InfiniLoadBase {
       this._runtime.computations = {};
       // Stop all subscriptions.
       if (this._runtime.subscription) {
-        // It's OK to call `stop` multiple times.
+        // It's OK to call 'stop' multiple times.
         this._runtime.subscription.stop();
         this._runtime.subscription = null;
       }
@@ -1070,7 +1065,7 @@ InfiniLoadClient._DATA = _.extend({}, InfiniLoadBase._DATA, /** @lends InfiniLoa
     * Each unique instance for a unique collection would have a dedicated
     *     collection for its data. So this is a map of map of collections.
     * I.e. An instance with ID "foo" for collection "bar" would have its
-    *     collection at `collections.bar.foo`.
+    *     collection at 'collections.bar.foo'.
     * These collections are only needed on client side.
     * @type {Map.<String, Map.<String, Mongo.Collection>>}
     */

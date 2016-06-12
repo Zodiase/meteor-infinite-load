@@ -1,4 +1,3 @@
-import { Meteor } from 'meteor/meteor';
 import { Mongo } from 'meteor/mongo';
 import { check, Match } from 'meteor/check';
 
@@ -53,7 +52,7 @@ class InfiniLoadBase {
    * @param {String} collectionName
    *        Name of the collection this InfiniLoad instance belongs to.
    * @param {String} instanceId
-   *        Id of this InfiniLoad instance.
+   *        ID of this InfiniLoad instance.
    * @returns {String}
    */
   static getInstanceCollectionName (collectionName, instanceId) {
@@ -84,7 +83,7 @@ class InfiniLoadBase {
     if (!instances.has(instanceCollectionName)) {
       instances.set(instanceCollectionName, instance);
     } else {
-      throw new Error('There is already an InfiniLoad instance with id "' + instanceId + '" for collection "' + collectionName + '".');
+      throw new Error(`There is already an InfiniLoad instance with ID "${instanceId}" for collection "${collectionName}".`);
     }
   }
 
@@ -101,8 +100,8 @@ class InfiniLoadBase {
   }
 
   /**
-   * Returns the Id of this InfiniLoad instance.
-   * Ids are unique for each collection they belong to.
+   * Returns the ID of this InfiniLoad instance.
+   * IDs are unique for each collection they belong to.
    * @returns {String}
    */
   get id () {
@@ -125,8 +124,9 @@ class InfiniLoadBase {
    * Shortcut to `console.log()` for easier disabling.
    * @private
    */
-  _log () {
-    console.log('* InfiniLoad >', this.collectionName, '>',  ...arguments);
+  _log (...args) {
+    /*eslint no-console: "off"*/
+    console.log('* InfiniLoad >', this.collectionName, '>', ...args);
   }
 
   /**
@@ -141,37 +141,37 @@ class InfiniLoadBase {
     check(maxDepth, Number);
     check(depth, Number);
 
-    let result;
+    let result = null;
 
     switch (typeof val) {
-      case 'string':
-        result = val.length > self._CONST.INSPECT_STRING_MAX_LEN
-                 ? val.substr(0, self._CONST.INSPECT_STRING_LEFT_KEPT) + ' ... ' + val.substr(-self._CONST.INSPECT_STRING_RIGHT_KEPT)
+    case 'string':
+      result = val.length > self._CONST.INSPECT_STRING_MAX_LEN
+               ? `${val.substr(0, self._CONST.INSPECT_STRING_LEFT_KEPT)} ... ${val.substr(-self._CONST.INSPECT_STRING_RIGHT_KEPT)}`
+               : val;
+      break;
+    case 'object':
+      if (Array.isArray(val)) {
+        result = val.length > self._CONST.INSPECT_ARRAY_MAX_LEN
+                 ? val.slice(0, self._CONST.INSPECT_ARRAY_MAX_LEN).concat(' ... ')
                  : val;
-        break;
-      case 'object':
-        if (Array.isArray(val)) {
-          result = val.length > self._CONST.INSPECT_ARRAY_MAX_LEN
-                   ? val.slice(0, self._CONST.INSPECT_ARRAY_MAX_LEN).concat(' ... ')
-                   : val;
-        } else if (val === null) {
-          result = val;
+      } else if (val === null) {
+        result = val;
+      } else {
+        if (depth > maxDepth) {
+          result = '[object Object]';
         } else {
-          if (depth > maxDepth) {
-            result = '[object Object]';
-          } else {
-            result = {};
-            for (let key of Object.keys(val)) {
-              result[key] = this._inspect(val[key], maxDepth, depth + 1);
-            }
+          result = {};
+          for (let key of Object.keys(val)) {
+            result[key] = this._inspect(val[key], maxDepth, depth + 1);
           }
         }
-        break;
-      default:
-        result = val;
-        break;
+      }
+      break;
+    default:
+      result = val;
+      break;
     }
-    
+
     return result;
   }
 }
@@ -191,7 +191,7 @@ InfiniLoadBase._CONST = {
   INSPECT_STRING_LEFT_KEPT: 170,
   INSPECT_STRING_RIGHT_KEPT: 80,
   INSPECT_ARRAY_MAX_LEN: 15,
-  OP_NOOP: () => {},
+  OP_NOOP: () => { /* NO-OP */ },
   OP_RETURN_THIS: function () {
     return this;
   }

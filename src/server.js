@@ -53,7 +53,7 @@ class InfiniLoadServer extends InfiniLoadBase {
    * @callback InfiniLoadServer~Affiliation
    * @param {Object} doc
    * @param {Function} add
-   *        Same as `this.added` in `Meteor.publish`; pass the collection name as the first parameter, document ID as the second, and the document as the third.
+   *        Same as 'this.added' in 'Meteor.publish'; pass the collection name as the first parameter, document ID as the second, and the document as the third.
    */
 
   /**
@@ -68,7 +68,7 @@ class InfiniLoadServer extends InfiniLoadBase {
    *           The fields object or a factory function for generating the fields object.
    * @property {String|{name: String, type: String}} [timeField={name: "createTime", type: "number"}]
    *           The name and type of the field used for temporal sorting.
-   *           If a `string` is provided, it is considered the name of the field and type is the default value `"number"`.
+   *           If a 'string' is provided, it is considered the name of the field and type is the default value '"number"'.
    * @property {InfiniLoadServer~Affiliation} [affiliation=null]
    *           Use this function to add more documents to be published alongside.
    * @property {Number} [slowdown=0]
@@ -98,7 +98,7 @@ class InfiniLoadServer extends InfiniLoadBase {
     const sort = options.sort || {};
     const fields = options.fields || {};
     const timeField = (typeof options.timeField === 'string')
-                      ? {name: options.timeField}
+                      ? { name: options.timeField }
                       : options.timeField || {};
     const timeFieldName = timeField.name || 'createTime';
     const timeFieldType = timeField.type || 'number';
@@ -112,8 +112,7 @@ class InfiniLoadServer extends InfiniLoadBase {
     const slowdown = options.slowdown || 0;
 
     if (self._CONST.SUPPORTED_TIME_TYPES.indexOf(timeFieldType) < 0) {
-      throw new Error('Error when initializing InfiniLoadServer ' + me.id + '. "' +
-        timeFieldType + '" is not a supported time field type.');
+      throw new Error(`Error when initializing InfiniLoadServer ${me.id}. "${timeFieldType}" is not a supported time field type.`);
     }
 
     /***************************************************************************
@@ -152,7 +151,7 @@ class InfiniLoadServer extends InfiniLoadBase {
       const subscriptionId = connection._subscriptionId;
       // When userId changes the connection will be reset.
       const userId = connection.userId;
-      // `Date.now()` is faster than `new Date().getTime()`.
+      // 'Date.now()' is faster than 'new Date().getTime()'.
       const now = Date.now();
 
       me._log('subscribe', me._inspect({ subscriptionId, options }));
@@ -172,8 +171,6 @@ class InfiniLoadServer extends InfiniLoadBase {
       const serverArgs = options.args || {};
       const findLimit = options.limit || 0;
       const lastLoadTime = initialLoad ? now : options.lastLoadTime;
-      // This value is used in selectors.
-      const lastLoadTime_typed = self._CONST.CONVERT_TIME[timeFieldType](lastLoadTime);
 
       const findSelector = getFindSelector(userId, serverArgs);
       //! Current only support Object style sort options. Need to support array style.
@@ -351,7 +348,7 @@ class InfiniLoadServer extends InfiniLoadBase {
           limit: findLimit,
           serverArgs
         };
-      }
+      };
 
       const addStatsDocumentToClient = () => {
         const newStatsDoc = GenerateStatsDocument();
@@ -375,9 +372,9 @@ class InfiniLoadServer extends InfiniLoadBase {
               //     until the result is conclusive or the sorting fields run out.
 
               let sortingFieldIndex = 0,
-                  sortingFieldName,
-                  sortingCondition,
-                  result;
+                  sortingFieldName = null,
+                  sortingCondition = null,
+                  result = null;
               do {
                 sortingFieldName = sortingFields[sortingFieldIndex];
                 sortingCondition = findSort[sortingFieldName];
