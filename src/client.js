@@ -92,6 +92,12 @@ class InfiniLoadClient extends InfiniLoadBase {
      */
     me._runtime._.set('busy', false);
     /*
+     * Indicate whether this instance is starting up.
+     * Reset on start.
+     * @type {Boolean}
+     */
+    me._runtime._.set('starting', false);
+    /*
      * Indicate whether this instance is shutting down.
      * Reset on start.
      * @type {Boolean}
@@ -649,13 +655,23 @@ class InfiniLoadClient extends InfiniLoadBase {
   }
 
   /**
-   * Check if we are started. That is, we are running and no other flags are present.
+   * Returns true if running and not stopping.
    * A reactive data source.
    * @returns {Boolean}
    */
   get started () {
     return this._runtime._.get('running') &&
            !this._runtime._.get('stopping');
+  }
+
+  /**
+   * Returns true if started and not starting.
+   * A reactive data source.
+   * @returns {Boolean}
+   */
+  get ready () {
+    return this.started &&
+           !this._runtime._.get('starting');
   }
 
   /**
@@ -915,6 +931,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
     this._log('starting...');
 
+    this._runtime._.set('starting', true);
     this._runtime._.set('running', true);
     this._runtime._.set('busy', false);
     this._runtime._.set('stopping', false);
@@ -944,7 +961,7 @@ class InfiniLoadClient extends InfiniLoadBase {
     const handle = self._newSubscription(this);
     return handle.then((inst) => {
       this._log('started');
-
+      this._runtime._.set('starting', false);
       return inst;
     });
   }
@@ -981,6 +998,7 @@ class InfiniLoadClient extends InfiniLoadBase {
 
     // Set a flag to indicate we are stopping.
     this._runtime._.set('stopping', true);
+    this._runtime._.set('starting', false);
     return handle.then((inst) => {
       // Stop all computations.
       for (let name of Object.keys(this._runtime.computations)) {
