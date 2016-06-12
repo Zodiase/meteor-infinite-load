@@ -38,11 +38,11 @@ let infiniSomeData = new InfiniLoad(someCollection);
 
 Template.body.helpers({
   'dataReady' () {
-    // `.started` is an reactive data source. When it returns `true`, it is safe to access data.
-    return infiniSomeData.started;
+    // `.ready` is an reactive data source. When it returns `true`, it is safe to access data.
+    return infiniSomeData.ready;
   },
   'docItems' () {
-    if (!infiniSomeData.started) {
+    if (!infiniSomeData.ready) {
       return [];
     } else {
       // Use `.find` as you would on a `Mongo.Collection`.
@@ -59,7 +59,7 @@ Template.body.helpers({
 
 Template.body.events({
   'click .button-loadMore' (event, tpl) {
-    if (infiniSomeData.started) {
+    if (infiniSomeData.ready) {
       const buttonElement = event.currentTarget;
       // Disable the button to prevent more clicks before the request is ready.
       buttonElement.disabled = true;
@@ -71,7 +71,7 @@ Template.body.events({
     }
   },
   'click .button-loadNew' (event, tpl) {
-    if (infiniSomeData.started) {
+    if (infiniSomeData.ready) {
       const buttonElement = event.currentTarget;
       // Disable the button to prevent more clicks before the request is ready.
       buttonElement.disabled = true;
