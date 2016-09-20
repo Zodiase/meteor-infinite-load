@@ -186,7 +186,8 @@ InfiniLoadBase._CONST = {
   DEFAULT_ID: 'default',
   COLLECTION_NAMESPACE: '__InfiniLoad',
   NAMESPACE_DELIMITER: '/',
-  STATS_DOCUMENT_ID: 0,
+  // Document ID must be non-empty string.
+  STATS_DOCUMENT_ID: '__zodiase:infinite-load__',
   INSPECT_STRING_MAX_LEN: 255,
   INSPECT_STRING_LEFT_KEPT: 170,
   INSPECT_STRING_RIGHT_KEPT: 80,
