@@ -1,5 +1,7 @@
 Infinite Load for Meteor
 ========================
+
+[![Greenkeeper badge](https://badges.greenkeeper.io/Zodiase/meteor-infinite-load.svg)](https://greenkeeper.io/)
 A helper library for loading items from a collection incrementally and also know how many new items are available to be pulled.
 
 Design Principles
